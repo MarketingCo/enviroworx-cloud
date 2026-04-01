@@ -1,4 +1,4 @@
-import { posts } from '@/src/data/posts';
+import { posts } from '@/data/posts';
 import { notFound } from 'next/navigation';
 import { Clock, ArrowLeft, Zap } from 'lucide-react';
 import Link from 'next/link';

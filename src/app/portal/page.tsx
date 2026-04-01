@@ -162,6 +162,7 @@ export default function CustomerPortal() {
       date: collDate,
       status: 'Booked' as any,
       job_type: 'Collection' as any,
+      skip_size: 'N/A',
       address: collAddress.trim(),
       customer_id: customer!.id,
       customer_name: customer!.name,

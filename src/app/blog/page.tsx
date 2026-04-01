@@ -1,5 +1,5 @@
 'use client';
-import { posts } from '@/src/data/posts';
+import { posts } from '@/data/posts';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowRight, Clock, MonitorDot } from 'lucide-react';

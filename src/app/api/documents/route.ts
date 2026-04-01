@@ -23,11 +23,12 @@ async function generateWTN(params: URLSearchParams) {
   if (!ticketNumber) return NextResponse.json({ error: 'Missing ticketNumber' }, { status: 400 })
 
   // Fetch weight log + cash log for this ticket
-  const { data: wl } = await supabaseAdmin.from('weight_logs')
+  const { data: wlRaw } = await supabaseAdmin.from('weight_logs')
     .select('*')
     .eq('ticket_number', ticketNumber)
     .single()
 
+  const wl = wlRaw as any
   if (!wl) return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
 
   const { data: cl } = await supabaseAdmin.from('cash_log')
@@ -35,9 +36,9 @@ async function generateWTN(params: URLSearchParams) {
     .eq('ticket_number', ticketNumber)
     .single()
 
-  const ewcCode = WASTE_CODES[wl.waste_type] || '20 03 01'
+  const ewcCode = WASTE_CODES[(wl.waste_type ?? '') as string] || '20 03 01'
   const net = Math.abs((wl.gross_weight || 0) - (wl.tare_weight || 0))
-  const date = new Date(wl.logged_at || wl.created_at).toLocaleDateString('en-GB')
+  const date = new Date(wl.logged_at || new Date().toISOString()).toLocaleDateString('en-GB')
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8">

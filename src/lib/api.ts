@@ -125,7 +125,7 @@ export async function autoAssignJobs(targetDate: string) {
   drivers.forEach(d => driverPayloads[d.name] = [])
 
   let assignedCount = 0
-  const updates: Promise<any>[] = []
+  const updates: PromiseLike<any>[] = []
 
   for (const job of unassigned) {
     for (const driver of drivers) {
@@ -140,7 +140,7 @@ export async function autoAssignJobs(targetDate: string) {
             driver_name: driver.name,
             driver_id: driver.id,
             status: 'Assigned' as any
-          }).eq('id', job.id)
+          }).eq('id', job.id).then(r => r)
         )
 
         if (job.job_type !== 'Collection') driverPayloads[driver.name] = currentLoad
@@ -828,7 +828,7 @@ export async function getSkipUtilization() {
     if (!sizeMap[size]) sizeMap[size] = { total: 0, inUse: 0, available: 0, damaged: 0 }
     sizeMap[size].total++
     if (skip.status === 'Available') sizeMap[size].available++
-    else if (['In Use', 'Delivered'].includes(skip.status)) sizeMap[size].inUse++
+    else if (['In Use', 'Delivered'].includes(skip.status as string)) sizeMap[size].inUse++
     else if (skip.status === 'Damaged') sizeMap[size].damaged++
   }
 
@@ -839,7 +839,7 @@ export async function getSkipUtilization() {
   }))
 
   const total = inventory.length
-  const inUse = inventory.filter(s => ['In Use', 'Delivered'].includes(s.status)).length
+  const inUse = inventory.filter(s => ['In Use', 'Delivered'].includes(s.status as string)).length
   const available = inventory.filter(s => s.status === 'Available').length
 
   return {

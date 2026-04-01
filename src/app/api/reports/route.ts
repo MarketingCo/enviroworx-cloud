@@ -24,14 +24,15 @@ export async function GET(request: Request) {
   switch (type) {
     case 'SEPA': {
       headers = ['Date', 'Ticket', 'Customer', 'Lorry Reg', 'Address', 'Waste Type', 'Direction', 'Net Weight (kg)']
-      const { data } = await supabaseAdmin.from('weight_logs')
+      const { data: wlData } = await supabaseAdmin.from('weight_logs')
         .select('*')
         .gte('logged_at', start)
         .lte('logged_at', end + 'T23:59:59')
         .order('logged_at')
+      const data = wlData as any[]
 
       rows = (data ?? []).map(r => [
-        new Date(r.logged_at).toLocaleDateString('en-GB'),
+        new Date(r.logged_at ?? Date.now()).toLocaleDateString('en-GB'),
         r.ticket_number,
         r.customer_name,
         r.lorry_reg,
@@ -45,14 +46,14 @@ export async function GET(request: Request) {
 
     case 'FINANCE': {
       headers = ['Date', 'Ticket', 'Customer', 'Waste Type', 'Net Weight', 'Cost Net', 'Cost Gross', 'Amount Paid', 'Payment Method']
-      const { data } = await supabaseAdmin.from('cash_log')
+      const { data: finData } = await supabaseAdmin.from('cash_log')
         .select('*')
         .gte('logged_at', start)
         .lte('logged_at', end + 'T23:59:59')
         .order('logged_at')
 
-      rows = (data ?? []).map(r => [
-        new Date(r.logged_at).toLocaleDateString('en-GB'),
+      rows = (finData ?? []).map(r => [
+        new Date(r.logged_at ?? Date.now()).toLocaleDateString('en-GB'),
         r.ticket_number, r.customer_name, r.waste_type,
         r.net_weight, r.cost_net, r.cost_gross, r.amount_paid, r.payment_method,
       ])
@@ -104,7 +105,7 @@ export async function GET(request: Request) {
         const net = cl.cost_net || 0
         const gross = cl.cost_gross || 0
         rows.push([
-          cl.customer_name, new Date(cl.logged_at).toLocaleDateString('en-GB'),
+          cl.customer_name, new Date(cl.logged_at ?? Date.now()).toLocaleDateString('en-GB'),
           `Weighbridge Tip: ${cl.ticket_number} (${cl.waste_type})`,
           'Weighbridge Tip', net.toFixed(2), (gross - net).toFixed(2), gross.toFixed(2),
         ])
