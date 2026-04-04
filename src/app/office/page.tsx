@@ -29,6 +29,7 @@ import {
   CalendarPlus,
   Users,
   FileText,
+  FileSpreadsheet,
   Wrench,
   RefreshCw,
   CheckCircle,

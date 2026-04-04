@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
         customerName: inv.customer_name || 'Unknown',
         address: inv.address || 'N/A',
         amountPaid: 0, // Invoices in this view are unpaid
-        costGross: inv.gross_cost || 0,
+        costGross: inv.amount || 0,
         paymentMethod: 'Invoice',
         sheetName: 'SEPA'
       });
