@@ -18,6 +18,7 @@ import {
   generateReport,
   getSkipUtilization,
   getLorries,
+  updateConfig,
 } from '@/lib/api'
 import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
 import toast, { Toaster } from 'react-hot-toast'
@@ -42,11 +43,12 @@ import {
   X,
   Search,
   DollarSign,
+  Settings,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = 'dashboard' | 'dispatch' | 'weighbridge' | 'bookings' | 'customers' | 'reports' | 'fleet' | 'inventory' | 'map'
+type Tab = 'dashboard' | 'dispatch' | 'weighbridge' | 'bookings' | 'customers' | 'reports' | 'fleet' | 'inventory' | 'map' | 'settings'
 
 interface DashStats {
   stats: { 
@@ -1931,6 +1933,198 @@ function MapTab() {
   )
 }
 
+// ─── Settings Tab ────────────────────────────────────────────────────────────
+
+function SettingsTab() {
+  const [config, setConfig] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from('config').select('*')
+      const cfg: any = {}
+      data?.forEach(row => { cfg[row.key] = row.value })
+      setConfig(cfg)
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  async function handleSave(key: string, value: any) {
+    setSaving(true)
+    try {
+      await updateConfig(key, value)
+      toast.success('Settings updated')
+    } catch (e: any) {
+      toast.error('Failed to update: ' + e.message)
+    }
+    setSaving(false)
+  }
+
+  if (loading) return <div className="p-10 text-center text-slate-500 font-black uppercase animate-pulse">Loading system settings...</div>
+
+  return (
+    <div className="space-y-10 max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <div className="grid md:grid-cols-2 gap-8">
+        {/* Skip Prices */}
+        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl">
+          <SectionHeader title="Skip Hire Prices (Net)" />
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mt-4">
+            {Object.entries(config.prices_skip || {}).map(([size, price]: [string, any]) => (
+              <div key={size} className="flex flex-col gap-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase">{size}yd Skip</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 font-bold text-xs">£</span>
+                  <input
+                    type="number"
+                    defaultValue={price}
+                    onBlur={e => {
+                      const next = { ...config.prices_skip, [size]: Number(e.target.value) }
+                      handleSave('prices_skip', next)
+                    }}
+                    className="bg-slate-800 border border-white/10 text-white px-2 py-1 rounded text-sm w-full focus:border-primary outline-none"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Waste Rates */}
+        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl">
+          <SectionHeader title="Waste Tip Rates (per Tonne)" />
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mt-4">
+            {Object.entries(config.prices_waste || {}).map(([type, price]: [string, any]) => (
+              <div key={type} className="flex flex-col gap-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase">{type}</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 font-bold text-xs">£</span>
+                  <input
+                    type="number"
+                    defaultValue={price}
+                    onBlur={e => {
+                      const next = { ...config.prices_waste, [type]: Number(e.target.value) }
+                      handleSave('prices_waste', next)
+                    }}
+                    className="bg-slate-800 border border-white/10 text-white px-2 py-1 rounded text-sm w-full focus:border-primary outline-none"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Disposal Costs */}
+        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl">
+          <SectionHeader title="Profitability Calc (Disposal Costs)" />
+          <p className="text-[9px] text-slate-500 mb-4 uppercase font-bold italic tracking-tighter italic">Your actual costs per tonne at the tip.</p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+            {Object.entries(config.disposal_costs || {}).map(([type, cost]: [string, any]) => (
+              <div key={type} className="flex flex-col gap-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase">{type}</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 font-bold text-xs">£</span>
+                  <input
+                    type="number"
+                    defaultValue={cost}
+                    onBlur={e => {
+                      const next = { ...config.disposal_costs, [type]: Number(e.target.value) }
+                      handleSave('disposal_costs', next)
+                    }}
+                    className="bg-slate-800 border border-white/10 text-white px-2 py-1 rounded text-sm w-full focus:border-primary outline-none"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Operational Limits */}
+        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 space-y-6 shadow-xl">
+          <div>
+            <SectionHeader title="Neural Settings" />
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase">Default Credit Limit</label>
+                <input type="number" defaultValue={config.credit_limit} onBlur={e => handleSave('credit_limit', Number(e.target.value))}
+                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase">Max Hire (Days)</label>
+                <input type="number" defaultValue={config.demurrage_days} onBlur={e => handleSave('demurrage_days', Number(e.target.value))}
+                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
+              </div>
+            </div>
+          </div>
+          <div>
+            <SectionHeader title="Financial Constants" />
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase">VAT Rate (0.20)</label>
+                <input type="number" defaultValue={config.vat_rate} onBlur={e => handleSave('vat_rate', Number(e.target.value))}
+                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Company Info */}
+      <div className="bg-slate-900 border border-white/5 rounded-2xl p-8 shadow-2xl">
+        <SectionHeader title="Identity & Branding" />
+        <p className="text-[10px] text-slate-500 mb-6 uppercase tracking-widest">Global metadata for generated documentation.</p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+          <div className="space-y-5 col-span-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-black text-slate-500 uppercase">Registered Business Name</label>
+              <input type="text" defaultValue={config.company_info?.name} onBlur={e => handleSave('company_info', { ...config.company_info, name: e.target.value })}
+                className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm w-full focus:border-primary outline-none" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-black text-slate-500 uppercase">Trading Address</label>
+              <textarea defaultValue={config.company_info?.address} onBlur={e => handleSave('company_info', { ...config.company_info, address: e.target.value })}
+                className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm w-full h-20 focus:border-primary outline-none" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase">Office Phone</label>
+                <input type="text" defaultValue={config.company_info?.phone} onBlur={e => handleSave('company_info', { ...config.company_info, phone: e.target.value })}
+                  className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase">Waste Carrier Licence</label>
+                <input type="text" defaultValue={config.company_info?.waste_licence} onBlur={e => handleSave('company_info', { ...config.company_info, waste_licence: e.target.value })}
+                  className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-5 bg-slate-950/50 p-6 rounded-2xl border border-white/5 shadow-inner">
+            <p className="text-[10px] font-black text-primary uppercase mb-2 italic">Banking Protocol</p>
+            <div className="flex flex-col gap-1">
+              <label className="text-[9px] font-black text-slate-600 uppercase">Bank Provider</label>
+              <input type="text" defaultValue={config.company_info?.bank_name} onBlur={e => handleSave('company_info', { ...config.company_info, bank_name: e.target.value })}
+                className="bg-transparent border-b border-white/10 text-white py-1 rounded-none text-sm focus:border-primary outline-none" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[9px] font-black text-slate-600 uppercase">Sort Code</label>
+              <input type="text" defaultValue={config.company_info?.sort_code} onBlur={e => handleSave('company_info', { ...config.company_info, sort_code: e.target.value })}
+                className="bg-transparent border-b border-white/10 text-white py-1 rounded-none text-sm focus:border-primary outline-none" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[9px] font-black text-slate-600 uppercase">Account Number</label>
+              <input type="text" defaultValue={config.company_info?.account_number} onBlur={e => handleSave('company_info', { ...config.company_info, account_number: e.target.value })}
+                className="bg-transparent border-b border-white/10 text-white py-1 rounded-none text-sm focus:border-primary outline-none" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Office Page ─────────────────────────────────────────────────────────
 
 export default function OfficePage() {
@@ -1992,6 +2186,7 @@ export default function OfficePage() {
     { id: 'fleet', label: 'Fleet', icon: <Wrench size={16} /> },
     { id: 'inventory', label: 'Inventory', icon: <Package size={16} /> },
     { id: 'map', label: 'Live Map', icon: <TrendingUp size={16} /> },
+    { id: 'settings', label: 'Settings', icon: <Settings size={16} /> },
   ]
 
   const isConfigMissing = !process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -2054,6 +2249,7 @@ export default function OfficePage() {
         {tab === 'fleet' && <FleetTab />}
         {tab === 'inventory' && <InventoryTab />}
         {tab === 'map' && <MapTab />}
+        {tab === 'settings' && <SettingsTab />}
       </main>
     </div>
   )

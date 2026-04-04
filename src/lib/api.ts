@@ -941,6 +941,12 @@ export async function getLorries() {
   return data ?? []
 }
 
+export async function updateConfig(key: string, value: any) {
+  const { error } = await supabase.from('config').upsert({ key, value, updated_at: new Date().toISOString() })
+  if (error) throw error
+  return { success: true }
+}
+
 export async function updateLorry(id: string, updates: { status?: string; mileage?: number; mot_due?: string; tax_due?: string }) {
   const { error } = await supabase.from('lorries').update(updates).eq('id', id)
   if (error) throw error
