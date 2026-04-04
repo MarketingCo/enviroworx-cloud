@@ -48,12 +48,19 @@ import {
 type Tab = 'dashboard' | 'dispatch' | 'weighbridge' | 'bookings' | 'customers' | 'reports' | 'fleet' | 'inventory' | 'map'
 
 interface DashStats {
-  stats: { completedToday: number; completedWeek: number; futureBookings: number; tipsToday: number }
+  stats: { 
+    completedToday: number; 
+    completedWeek: number; 
+    futureBookings: number; 
+    tipsToday: number;
+    estProfitToday: number;
+  }
   inventorySummary: any[]
   activeTippers: any[]
   unpaidInvoices: any[]
   driverHours: any[]
   collections: any[]
+  expiringPermits: any[]
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -103,7 +110,7 @@ function DashboardTab({ data, onRefresh }: { data: DashStats | null; onRefresh: 
   if (!data) return <div className="flex items-center justify-center h-64 text-slate-500 text-sm">Loading dashboard...</div>
 
   const totalUnpaid = data.unpaidInvoices.reduce((s: number, i: any) => s + (i.outstanding || 0), 0)
-  const expiringPermits = (data as any).expiringPermits || []
+  const expiringPermits = data.expiringPermits || []
 
   return (
     <div className="space-y-8">
@@ -136,7 +143,7 @@ function DashboardTab({ data, onRefresh }: { data: DashStats | null; onRefresh: 
         <KpiCard label="Completed This Week" value={data.stats.completedWeek} icon={<TrendingUp size={24} />} />
         <KpiCard label="Future Bookings" value={data.stats.futureBookings} icon={<CalendarPlus size={24} />} color="text-blue-400" />
         <KpiCard label="Tips Today" value={data.stats.tipsToday} icon={<Weight size={24} />} color="text-yellow-400" />
-        <KpiCard label="Est. Profit Today" value={fmt((data.stats as any).estProfitToday || 0)} icon={<DollarSign size={24} />} color="text-emerald-500" />
+        <KpiCard label="Est. Profit Today" value={fmt(data.stats.estProfitToday || 0)} icon={<DollarSign size={24} />} color="text-emerald-500" />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
