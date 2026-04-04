@@ -125,7 +125,7 @@ export async function autoAssignJobs(targetDate: string) {
   drivers.forEach(d => driverPayloads[d.name] = [])
 
   let assignedCount = 0
-  const updates: PromiseLike<any>[] = []
+  const assignments: { job: any; driverName: string; driverId: string }[] = []
 
   for (const job of unassigned) {
     for (const driver of drivers) {
@@ -135,14 +135,7 @@ export async function autoAssignJobs(targetDate: string) {
       const testCombo = currentLoad.join('|')
 
       if (job.job_type === 'Collection' || currentLoad.length === 0 || comboSet.has(testCombo)) {
-        updates.push(
-          supabase.from('orders').update({
-            driver_name: driver.name,
-            driver_id: driver.id,
-            status: 'Assigned' as any
-          }).eq('id', job.id).then(r => r)
-        )
-
+        assignments.push({ job, driverName: driver.name, driverId: driver.id })
         if (job.job_type !== 'Collection') driverPayloads[driver.name] = currentLoad
         assignedCount++
         break
@@ -150,7 +143,28 @@ export async function autoAssignJobs(targetDate: string) {
     }
   }
 
-  await Promise.all(updates)
+  await Promise.all(assignments.map(({ job, driverName, driverId }) =>
+    supabase.from('orders').update({
+      driver_name: driverName,
+      driver_id: driverId,
+      status: 'Assigned' as any
+    }).eq('id', job.id)
+  ))
+
+  // SMS notifications for customers with phone numbers
+  const smsPromises = assignments
+    .filter(({ job }) => job.phone)
+    .map(({ job, driverName }) =>
+      fetch('/api/sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: job.phone,
+          body: `Enviroworx: Your ${job.job_type?.toLowerCase() || 'job'} is scheduled for ${targetDate}. Driver: ${driverName}. Reply STOP to opt out.`
+        })
+      }).catch(() => {})
+    )
+  await Promise.all(smsPromises)
 
   return { success: true, message: `Assigned ${assignedCount} jobs.` }
 }

@@ -13,6 +13,12 @@ export interface AppConfig {
   permitAdminFee: number
   permitWeeklyFee: number
   officePhone: string
+  officeEmail: string
+  officeAddress: string
+  vatNumber: string
+  bankName: string
+  sortCode: string
+  accountNumber: string
   pricesWaste: Record<string, number>
   pricesSkip: Record<string, number>
 }
@@ -28,6 +34,12 @@ export const DEFAULT_CONFIG: AppConfig = {
   permitAdminFee: 40,
   permitWeeklyFee: 45,
   officePhone: '01310000000',
+  officeEmail: 'accounts@enviroworx.co.uk',
+  officeAddress: 'Edinburgh, Scotland, EH1 1AA',
+  vatNumber: 'GB000000000',
+  bankName: 'Bank of Scotland',
+  sortCode: '80-22-60',
+  accountNumber: '00000000',
   pricesWaste: {
     'Mix Con': 165, 'Mix Mun': 200, 'Wood': 80,
     'Inert': 40, 'Soil': 40, 'Cardboard': 0, 'Metal': 0

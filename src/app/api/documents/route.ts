@@ -15,7 +15,8 @@ export async function GET(request: Request) {
 
   if (type === 'WTN') return generateWTN(searchParams)
   if (type === 'DTN') return generateDTN(searchParams)
-  return NextResponse.json({ error: 'Invalid type. Use WTN or DTN.' }, { status: 400 })
+  if (type === 'INVOICE') return generateInvoice(searchParams)
+  return NextResponse.json({ error: 'Invalid type. Use WTN, DTN, or INVOICE.' }, { status: 400 })
 }
 
 async function generateWTN(params: URLSearchParams) {
@@ -239,6 +240,172 @@ async function generateDTN(params: URLSearchParams) {
     headers: {
       'Content-Type': 'text/html',
       'Content-Disposition': `inline; filename="DTN_${orderId}.html"`,
+    },
+  })
+}
+
+// ─── Invoice Generator ───────────────────────────────────────────────────────
+
+async function generateInvoice(params: URLSearchParams) {
+  const customerId  = params.get('customerId')
+  const orderId     = params.get('orderId')   // optional — single order
+  const invoiceRef  = `INV-${Date.now().toString(36).toUpperCase()}`
+
+  if (!customerId && !orderId) {
+    return NextResponse.json({ error: 'Provide customerId or orderId' }, { status: 400 })
+  }
+
+  let orders: any[] = []
+  let customer: any = null
+
+  if (orderId) {
+    const { data } = await supabaseAdmin.from('orders').select('*').eq('id', orderId).single()
+    if (!data) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    orders = [data]
+    // Get customer
+    const { data: cust } = await supabaseAdmin.from('customers')
+      .select('*').ilike('name', data.customer_name).single()
+    customer = cust
+  } else {
+    const { data: cust } = await supabaseAdmin.from('customers').select('*').eq('id', customerId as string).single()
+    if (!cust) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+    customer = cust
+    const { data: ords } = await supabaseAdmin.from('orders')
+      .select('*')
+      .ilike('customer_name', cust.name)
+      .eq('status', 'Completed')
+      .eq('paid', false)
+      .eq('payment_method', 'Invoice')
+      .order('date')
+    orders = ords ?? []
+  }
+
+  if (orders.length === 0) {
+    return NextResponse.json({ error: 'No unpaid orders found' }, { status: 404 })
+  }
+
+  const config = DEFAULT_CONFIG
+  const vatRate = config.vatRate || 0.20
+
+  const lineItems = orders.map((o: any) => {
+    const size = (o.skip_size ?? '').replace(/\D/g, '')
+    const net = config.pricesSkip?.[size] || 0
+    const vat = net * vatRate
+    return { ...o, net, vat, gross: net + vat }
+  })
+
+  const totalNet = lineItems.reduce((s: number, l: any) => s + l.net, 0)
+  const totalVat = lineItems.reduce((s: number, l: any) => s + l.vat, 0)
+  const totalGross = lineItems.reduce((s: number, l: any) => s + l.gross, 0)
+
+  const fmt = (n: number) => `£${n.toFixed(2)}`
+  const date = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  const dueDate = new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 15mm; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #333; margin: 0; padding: 20px; }
+  .header { display: flex; justify-content: space-between; border-bottom: 3px solid #059669; padding-bottom: 20px; margin-bottom: 20px; }
+  .co-name { font-size: 22px; font-weight: bold; color: #059669; }
+  .co-info { font-size: 10px; color: #666; margin-top: 4px; }
+  .invoice-meta { text-align: right; }
+  .invoice-meta .inv-num { font-size: 18px; font-weight: bold; color: #333; }
+  h2 { font-size: 11px; text-transform: uppercase; color: #666; font-weight: bold; letter-spacing: 0.05em; border-bottom: 1px solid #eee; padding-bottom: 4px; margin: 20px 0 10px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  th { background: #f0fdf4; text-align: left; padding: 8px 12px; font-size: 10px; text-transform: uppercase; color: #059669; border: 1px solid #d1fae5; }
+  td { padding: 8px 12px; border-bottom: 1px solid #f3f4f6; font-size: 11px; }
+  .totals { margin-left: auto; width: 280px; }
+  .totals td { padding: 6px 12px; }
+  .totals .total-row td { font-weight: bold; font-size: 14px; background: #059669; color: white; }
+  .footer { margin-top: 40px; font-size: 9px; color: #999; border-top: 1px solid #eee; padding-top: 12px; text-align: center; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 9px; font-weight: bold; text-transform: uppercase; }
+  .badge-green { background: #dcfce7; color: #059669; }
+  .pay-box { background: #f0fdf4; border: 1px solid #059669; border-radius: 6px; padding: 16px; margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="co-name">ENVIROWORX</div>
+    <div class="co-info">
+      Enviroworx Ltd<br>
+      ${DEFAULT_CONFIG.officeAddress || 'Edinburgh, Scotland'}<br>
+      ${DEFAULT_CONFIG.officePhone || ''} · ${DEFAULT_CONFIG.officeEmail || 'accounts@enviroworx.co.uk'}<br>
+      VAT Reg: ${DEFAULT_CONFIG.vatNumber || 'GB000000000'}
+    </div>
+  </div>
+  <div class="invoice-meta">
+    <div class="inv-num">${invoiceRef}</div>
+    <div style="color:#666;font-size:10px;margin-top:8px">
+      <div>Invoice Date: <strong>${date}</strong></div>
+      <div>Payment Due: <strong>${dueDate}</strong></div>
+    </div>
+  </div>
+</div>
+
+<h2>Bill To</h2>
+<div>
+  <strong>${customer?.name || orders[0]?.customer_name || '—'}</strong><br>
+  ${customer?.billing_address || customer?.shipping_address || ''}<br>
+  ${customer?.email ? `<a href="mailto:${customer.email}">${customer.email}</a>` : ''}<br>
+  ${customer?.phone || ''}
+</div>
+
+<h2>Invoice Items</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Description</th>
+      <th>Address</th>
+      <th>Size</th>
+      <th style="text-align:right">Net</th>
+      <th style="text-align:right">VAT</th>
+      <th style="text-align:right">Gross</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${lineItems.map((l: any) => `
+    <tr>
+      <td>${l.date || '—'}</td>
+      <td>${l.job_type || 'Skip Hire'}</td>
+      <td>${l.address || '—'}</td>
+      <td>${l.skip_size || '—'}</td>
+      <td style="text-align:right">${fmt(l.net)}</td>
+      <td style="text-align:right">${fmt(l.vat)}</td>
+      <td style="text-align:right"><strong>${fmt(l.gross)}</strong></td>
+    </tr>`).join('')}
+  </tbody>
+</table>
+
+<table class="totals">
+  <tr><td>Subtotal (Net)</td><td style="text-align:right">${fmt(totalNet)}</td></tr>
+  <tr><td>VAT @ ${(vatRate * 100).toFixed(0)}%</td><td style="text-align:right">${fmt(totalVat)}</td></tr>
+  <tr class="total-row"><td>TOTAL DUE</td><td style="text-align:right">${fmt(totalGross)}</td></tr>
+</table>
+
+<div class="pay-box">
+  <strong>Payment Details</strong><br>
+  Bank Transfer: ${DEFAULT_CONFIG.bankName || 'Bank of Scotland'}<br>
+  Sort Code: ${DEFAULT_CONFIG.sortCode || '80-22-60'} · Account: ${DEFAULT_CONFIG.accountNumber || '00000000'}<br>
+  Reference: <strong>${invoiceRef}</strong><br>
+  <span style="font-size:10px;color:#666">Payment due within 30 days. Late payments may incur charges.</span>
+</div>
+
+<div class="footer">
+  Enviroworx Ltd · Registered in Scotland · ${invoiceRef} · Generated ${new Date().toISOString()}<br>
+  This document was computer generated. For queries call ${DEFAULT_CONFIG.officePhone || '0131 000 0000'}.
+</div>
+
+</body></html>`
+
+  return new NextResponse(html, {
+    headers: {
+      'Content-Type': 'text/html',
+      'Content-Disposition': `inline; filename="${invoiceRef}.html"`,
     },
   })
 }

@@ -10,6 +10,7 @@ import {
   processBooking,
   logActiveTipper,
   processWeightLog,
+  getStoredTare,
   searchCustomers,
   getCustomerTimeline,
   markJobPaid,
@@ -43,7 +44,7 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = 'dashboard' | 'dispatch' | 'weighbridge' | 'bookings' | 'customers' | 'reports' | 'fleet' | 'inventory'
+type Tab = 'dashboard' | 'dispatch' | 'weighbridge' | 'bookings' | 'customers' | 'reports' | 'fleet' | 'inventory' | 'map'
 
 interface DashStats {
   stats: { completedToday: number; completedWeek: number; futureBookings: number; tipsToday: number }
@@ -371,9 +372,11 @@ function WeighbridgeTab() {
   const [tippers, setTippers] = useState<any[]>([])
   const [lorries, setLorries] = useState<any[]>([])
   const [liveWeight, setLiveWeight] = useState<number | null>(null)
+  const [tareMsg, setTareMsg] = useState('')
+  const [manualOverride, setManualOverride] = useState('')
   const [form, setForm] = useState({
     lorryReg: '', customerName: '', wasteType: 'Mix Con', grossWeight: '',
-    tareWeight: '', skipSize: '8', skipId: '', address: '', direction: 'IN',
+    tareWeight: '', skipSize: 'Tipper', skipId: '', address: 'Yard', direction: 'On-site',
     paymentMethod: 'Invoice', amountPaid: '', wbNotes: '', tipperRowIndex: ''
   })
   const [logMode, setLogMode] = useState<'full' | 'tipper'>('tipper')
@@ -382,7 +385,7 @@ function WeighbridgeTab() {
     loadData()
     const ch = supabase.channel('wb').on('postgres_changes', { event: '*', schema: 'public', table: 'active_tippers' }, loadData).subscribe()
     const wbCh = supabase.channel('wb-readings').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'weighbridge_readings' }, (p) => {
-      setLiveWeight(p.new.weight_kg)
+      setLiveWeight((p.new as any).weight_kg)
     }).subscribe()
     return () => { supabase.removeChannel(ch); supabase.removeChannel(wbCh) }
   }, [])
@@ -398,6 +401,28 @@ function WeighbridgeTab() {
 
   function set(k: string, v: string) { setForm(f => ({ ...f, [k]: v })) }
 
+  async function fetchTare(reg: string, size: string) {
+    if (!reg) { setTareMsg(''); return }
+    setTareMsg('Checking...')
+    const tare = await getStoredTare(reg, size)
+    if (tare !== null) {
+      setForm(f => ({ ...f, tareWeight: String(tare) }))
+      setTareMsg('Auto-filled')
+    } else {
+      setTareMsg('No stored tare')
+    }
+  }
+
+  function handleLorryChange(val: string) {
+    set('lorryReg', val)
+    fetchTare(val, form.skipSize)
+  }
+
+  function handleSizeChange(val: string) {
+    set('skipSize', val)
+    fetchTare(form.lorryReg, val)
+  }
+
   function loadFromTipper(t: any) {
     setForm(f => ({
       ...f,
@@ -407,44 +432,60 @@ function WeighbridgeTab() {
       grossWeight: String(t.gross_weight || ''),
       skipSize: t.skip_size,
       skipId: t.skip_id || '',
-      address: t.address,
+      address: t.address || 'Yard',
       tipperRowIndex: t.id,
-      direction: 'OUT',
+      direction: 'On-site',
     }))
+    setManualOverride('')
     setLogMode('full')
+    if (t.reg && t.skip_size) fetchTare(t.reg, t.skip_size)
   }
 
   async function handleLogTipper() {
     const result = await logActiveTipper({
       lorryReg: form.lorryReg, customerName: form.customerName,
       wasteType: form.wasteType, grossWeight: Number(form.grossWeight),
-      address: form.address, skipSize: form.skipSize, skipId: form.skipId,
+      address: form.address || 'Yard', skipSize: form.skipSize, skipId: form.skipId,
     })
     result.success ? toast.success(result.message) : toast.error(result.message)
+    if (result.success) set('lorryReg', '')
   }
 
   async function handleProcessWeight() {
-    const net = Math.abs(Number(form.grossWeight) - Number(form.tareWeight))
-    const wasteRate = DEFAULT_CONFIG.pricesWaste[form.wasteType] || 0
-    const costNet = (net / 1000) * wasteRate
     const result = await processWeightLog({
       lorryReg: form.lorryReg, customerName: form.customerName,
       wasteType: form.wasteType, grossWeight: Number(form.grossWeight),
       tareWeight: Number(form.tareWeight), skipSize: form.skipSize,
-      skipId: form.skipId, address: form.address, direction: form.direction,
-      costNet, paymentMethod: form.paymentMethod,
+      skipId: form.skipId, address: form.address || 'Yard', direction: form.direction,
+      costNet: manualOverride !== '' ? Number(manualOverride) : undefined,
+      paymentMethod: form.paymentMethod,
       amountPaid: form.amountPaid ? Number(form.amountPaid) : 0,
       wbNotes: form.wbNotes, tipperRowIndex: form.tipperRowIndex,
     })
     result.success ? toast.success(result.message) : toast.error(result.message)
     if (result.success) {
       setForm(f => ({ ...f, lorryReg: '', customerName: '', grossWeight: '', tareWeight: '', skipId: '', amountPaid: '', wbNotes: '', tipperRowIndex: '' }))
+      setManualOverride('')
+      setTareMsg('')
       setLogMode('tipper')
     }
   }
 
-  const net = Number(form.grossWeight) - Number(form.tareWeight)
-  const estCostNet = (Math.abs(net) / 1000) * (DEFAULT_CONFIG.pricesWaste[form.wasteType] || 0)
+  // Pricing calculation (matches legacy logic exactly)
+  const gross = Number(form.grossWeight) || 0
+  const tare = Number(form.tareWeight) || 0
+  const net = Math.max(0, gross - tare)
+  const isCage = form.skipSize?.toUpperCase() === 'CAGE'
+  const isOwnFleet = !!form.lorryReg
+  const wasteRate = DEFAULT_CONFIG.pricesWaste[form.wasteType] || 0
+  let autoPrice = 0
+  if (isCage) {
+    autoPrice = 180 + (net / 1000) * wasteRate
+  } else if (!isOwnFleet) {
+    autoPrice = (net / 1000) * wasteRate
+  }
+  const displayPrice = manualOverride !== '' ? Number(manualOverride) : autoPrice
+  const displayLabel = isOwnFleet && manualOverride === '' ? 'Pre-paid skip — £0.00' : fmt(displayPrice)
 
   return (
     <div className="grid lg:grid-cols-5 gap-6">
@@ -453,15 +494,16 @@ function WeighbridgeTab() {
         <div className="bg-slate-900 border border-white/5 rounded-xl p-5">
           <SectionHeader title={`Holding Pen (${tippers.length})`} />
           {tippers.length === 0 && <p className="text-slate-500 text-sm">No trucks in yard</p>}
-          <div className="space-y-2">
+          <div className="space-y-2 mt-3">
             {tippers.map((t: any) => (
               <button key={t.id} onClick={() => loadFromTipper(t)}
                 className="w-full text-left bg-slate-800 hover:bg-slate-700 border border-white/5 hover:border-primary/50 rounded-lg p-3 transition-all">
-                <div className="flex justify-between">
-                  <span className="font-black text-white">{t.reg}</span>
+                <div className="flex justify-between items-center">
+                  <span className="font-black text-white">{t.reg || 'Manual'}</span>
                   <ChevronRight size={14} className="text-primary" />
                 </div>
                 <p className="text-xs text-slate-400">{t.customer_name} · {t.waste_type} · {t.skip_size}</p>
+                <p className="text-[10px] text-slate-600 mt-0.5">{new Date(t.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>
               </button>
             ))}
           </div>
@@ -487,28 +529,33 @@ function WeighbridgeTab() {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          {[
-            { label: 'Lorry Reg', key: 'lorryReg', type: 'text' },
-            { label: 'Customer', key: 'customerName', type: 'text' },
-          ].map(({ label, key, type }) => (
-            <div key={key}>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">{label}</label>
-              <input type={type} value={(form as any)[key]} onChange={e => set(key, e.target.value)}
-                className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
-            </div>
-          ))}
+          {/* Lorry dropdown (own fleet) — auto-fills tare on selection */}
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Lorry (Own Fleet)</label>
+            <select value={form.lorryReg} onChange={e => handleLorryChange(e.target.value)}
+              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm">
+              <option value="">-- Manual / 3rd Party --</option>
+              {lorries.map((l: any) => <option key={l.registration} value={l.registration}>{l.registration}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Customer / Site</label>
+            <input type="text" value={form.customerName} onChange={e => set('customerName', e.target.value)}
+              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
+          </div>
 
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Waste Type</label>
             <select value={form.wasteType} onChange={e => set('wasteType', e.target.value)}
               className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm">
-              {Object.keys(DEFAULT_CONFIG.pricesWaste).map(w => <option key={w}>{w}</option>)}
+              {Object.entries(DEFAULT_CONFIG.pricesWaste).map(([w, p]) => <option key={w} value={w}>{w} — £{p}/t</option>)}
             </select>
           </div>
 
           <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Skip Size</label>
-            <select value={form.skipSize} onChange={e => set('skipSize', e.target.value)}
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Skip / Vehicle Size</label>
+            <select value={form.skipSize} onChange={e => handleSizeChange(e.target.value)}
               className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm">
               {WB_SIZES.map(s => <option key={s}>{s}</option>)}
             </select>
@@ -521,7 +568,9 @@ function WeighbridgeTab() {
           </div>
 
           <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Skip ID</label>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">
+              Skip ID
+            </label>
             <input type="text" value={form.skipId} onChange={e => set('skipId', e.target.value)}
               className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
           </div>
@@ -529,17 +578,24 @@ function WeighbridgeTab() {
           {logMode === 'full' && (
             <>
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Tare Weight (kg)</label>
-                <input type="number" value={form.tareWeight} onChange={e => set('tareWeight', e.target.value)}
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">
+                  Tare Weight (kg)
+                  {tareMsg && <span className={`ml-2 normal-case font-semibold ${tareMsg === 'Auto-filled' ? 'text-primary' : 'text-amber-400'}`}>{tareMsg}</span>}
+                </label>
+                <input type="number" value={form.tareWeight} onChange={e => { set('tareWeight', e.target.value); setTareMsg('') }}
                   className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Direction</label>
-                <select value={form.direction} onChange={e => set('direction', e.target.value)}
-                  className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm">
-                  <option>IN</option><option>OUT</option>
-                </select>
+                <div className="grid grid-cols-2 gap-2">
+                  {[{ val: 'On-site', label: '↓ IN' }, { val: 'Off-site', label: '↑ OUT' }].map(d => (
+                    <button key={d.val} type="button" onClick={() => set('direction', d.val)}
+                      className={`py-2 rounded text-xs font-black transition-all ${form.direction === d.val ? (d.val === 'On-site' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white') : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -562,19 +618,30 @@ function WeighbridgeTab() {
                   className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
               </div>
 
-              {form.grossWeight && form.tareWeight && (
-                <div className="col-span-2 bg-slate-800 rounded-lg p-4 flex gap-8">
-                  <div>
-                    <p className="text-xs text-slate-500 uppercase tracking-widest">Net Weight</p>
-                    <p className="text-xl font-black text-white">{Math.abs(net).toLocaleString()} kg</p>
+              {/* Price calculation panel */}
+              {(gross > 0 || tare > 0) && (
+                <div className="col-span-2 bg-slate-800 rounded-lg p-4 space-y-3">
+                  <div className="flex gap-8">
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase tracking-widest">Net Weight</p>
+                      <p className="text-xl font-black text-white">{net.toLocaleString()} kg</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase tracking-widest">Net Cost</p>
+                      <p className="text-xl font-black text-primary">{displayLabel}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase tracking-widest">Gross (inc VAT)</p>
+                      <p className="text-xl font-black text-white">{fmt(displayPrice * 1.2)}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-500 uppercase tracking-widest">Est. Net Cost</p>
-                    <p className="text-xl font-black text-primary">{fmt(estCostNet)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 uppercase tracking-widest">Est. Gross</p>
-                    <p className="text-xl font-black text-white">{fmt(estCostNet * 1.2)}</p>
+                  {isCage && <p className="text-xs text-amber-400 font-bold">Includes £180 cage base fee</p>}
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs text-slate-500 font-bold uppercase tracking-widest whitespace-nowrap">Override (£)</label>
+                    <input type="number" value={manualOverride} onChange={e => setManualOverride(e.target.value)}
+                      placeholder="Auto" min="0" step="0.01"
+                      className="w-32 bg-slate-700 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none text-center" />
+                    {manualOverride && <button type="button" onClick={() => setManualOverride('')} className="text-slate-500 hover:text-white text-xs">Clear</button>}
                   </div>
                 </div>
               )}
@@ -1130,34 +1197,93 @@ function InventoryTab() {
 function FleetTab() {
   const [lorries, setLorries] = useState<any[]>([])
   const [issues, setIssues] = useState<any[]>([])
+  const [showLogIssue, setShowLogIssue] = useState(false)
+  const [issueForm, setIssueForm] = useState({ lorry_reg: '', issue_type: 'Mechanical', description: '', reported_by: '' })
+  const [savingIssue, setSavingIssue] = useState(false)
 
-  useEffect(() => {
-    async function load() {
-      const [lorryData, { data: issueData }] = await Promise.all([
-        getLorries(),
-        supabase.from('fleet_logs').select('*').eq('status', 'Open').order('created_at', { ascending: false }),
-      ])
-      setLorries(lorryData)
-      setIssues(issueData ?? [])
-    }
-    load()
-  }, [])
+  async function load() {
+    const [lorryData, { data: issueData }] = await Promise.all([
+      getLorries(),
+      supabase.from('fleet_logs').select('*').eq('status', 'Open').order('created_at', { ascending: false }),
+    ])
+    setLorries(lorryData)
+    setIssues(issueData ?? [])
+  }
 
-  function motStatus(dateStr: string | null) {
-    if (!dateStr) return 'text-slate-500'
-    const daysUntil = Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000)
-    if (daysUntil < 0) return 'text-red-400'
-    if (daysUntil < 30) return 'text-yellow-400'
+  useEffect(() => { load() }, [])
+
+  function motDays(dateStr: string | null): number | null {
+    if (!dateStr) return null
+    return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000)
+  }
+
+  function motColor(dateStr: string | null) {
+    const d = motDays(dateStr)
+    if (d === null) return 'text-slate-500'
+    if (d < 0) return 'text-red-400'
+    if (d < 30) return 'text-yellow-400'
     return 'text-green-400'
   }
 
+  async function logIssue() {
+    if (!issueForm.lorry_reg.trim() || !issueForm.description.trim()) return
+    setSavingIssue(true)
+    await supabase.from('fleet_logs').insert({
+      lorry_reg: issueForm.lorry_reg.trim(),
+      issue_type: issueForm.issue_type,
+      description: issueForm.description.trim(),
+      reported_by: issueForm.reported_by.trim() || 'Office',
+      status: 'Open',
+    })
+    toast.success('Issue logged')
+    setShowLogIssue(false)
+    setIssueForm({ lorry_reg: '', issue_type: 'Mechanical', description: '', reported_by: '' })
+    setSavingIssue(false)
+    load()
+  }
+
+  async function resolveIssue(id: string) {
+    await supabase.from('fleet_logs').update({ status: 'Resolved', resolved_at: new Date().toISOString() }).eq('id', id)
+    toast.success('Issue resolved')
+    load()
+  }
+
+  const alertVehicles = lorries.filter(l => {
+    const mot = motDays(l.mot_due)
+    const tax = motDays(l.tax_due)
+    return (mot !== null && mot < 30) || (tax !== null && tax < 30)
+  })
+
   return (
     <div className="space-y-6">
+      {/* Compliance alerts */}
+      {alertVehicles.length > 0 && (
+        <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-xl p-4">
+          <p className="text-yellow-400 font-black text-sm uppercase tracking-widest mb-2 flex items-center gap-2">
+            <AlertTriangle size={14} /> Compliance Alerts ({alertVehicles.length})
+          </p>
+          <div className="space-y-1">
+            {alertVehicles.map(l => {
+              const mot = motDays(l.mot_due)
+              const tax = motDays(l.tax_due)
+              return (
+                <p key={l.id} className="text-xs text-yellow-300">
+                  {l.registration}:
+                  {mot !== null && mot < 30 && <span className="ml-2">MOT {mot < 0 ? `EXPIRED ${Math.abs(mot)}d ago` : `due in ${mot}d`}</span>}
+                  {tax !== null && tax < 30 && <span className="ml-2">Tax {tax < 0 ? `EXPIRED ${Math.abs(tax)}d ago` : `due in ${tax}d`}</span>}
+                </p>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Lorry Fleet */}
         <div className="bg-slate-900 border border-white/5 rounded-xl p-5">
           <SectionHeader title={`Fleet (${lorries.length} vehicles)`} />
           <div className="space-y-3">
+            {lorries.length === 0 && <p className="text-slate-500 text-sm">No vehicles on record</p>}
             {lorries.map((l: any) => (
               <div key={l.id} className="border border-white/5 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -1167,11 +1293,19 @@ function FleetTab() {
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <span className="text-slate-500">MOT: </span>
-                    <span className={motStatus(l.mot_due)}>{l.mot_due || 'Unknown'}</span>
+                    <span className={motColor(l.mot_due)}>
+                      {l.mot_due
+                        ? `${l.mot_due}${motDays(l.mot_due) !== null ? ` (${motDays(l.mot_due)! < 0 ? 'EXPIRED' : motDays(l.mot_due) + 'd'})` : ''}`
+                        : 'Unknown'}
+                    </span>
                   </div>
                   <div>
                     <span className="text-slate-500">Tax: </span>
-                    <span className={motStatus(l.tax_due)}>{l.tax_due || 'Unknown'}</span>
+                    <span className={motColor(l.tax_due)}>
+                      {l.tax_due
+                        ? `${l.tax_due}${motDays(l.tax_due) !== null ? ` (${motDays(l.tax_due)! < 0 ? 'EXPIRED' : motDays(l.tax_due) + 'd'})` : ''}`
+                        : 'Unknown'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1181,7 +1315,71 @@ function FleetTab() {
 
         {/* Open Issues */}
         <div className="bg-slate-900 border border-white/5 rounded-xl p-5">
-          <SectionHeader title={`Open Issues (${issues.length})`} />
+          <div className="flex items-center justify-between mb-3">
+            <SectionHeader title={`Open Issues (${issues.length})`} />
+            <button
+              onClick={() => setShowLogIssue(!showLogIssue)}
+              className="text-xs font-black text-primary border border-primary/30 px-3 py-1 rounded hover:bg-primary/10 transition"
+            >
+              + Log Issue
+            </button>
+          </div>
+
+          {showLogIssue && (
+            <div className="bg-slate-800 rounded-lg p-4 mb-4 space-y-3 border border-white/5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Vehicle Reg</label>
+                  <select
+                    value={issueForm.lorry_reg}
+                    onChange={e => setIssueForm(f => ({ ...f, lorry_reg: e.target.value }))}
+                    className="w-full bg-slate-900 border border-white/10 text-white px-3 py-2 rounded text-sm focus:outline-none"
+                  >
+                    <option value="">Select...</option>
+                    {lorries.map(l => <option key={l.id}>{l.registration}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Issue Type</label>
+                  <select
+                    value={issueForm.issue_type}
+                    onChange={e => setIssueForm(f => ({ ...f, issue_type: e.target.value }))}
+                    className="w-full bg-slate-900 border border-white/10 text-white px-3 py-2 rounded text-sm focus:outline-none"
+                  >
+                    {['Mechanical', 'Electrical', 'Tyre', 'Body Damage', 'Safety', 'Other'].map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Description</label>
+                <input
+                  type="text"
+                  value={issueForm.description}
+                  onChange={e => setIssueForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Describe the issue..."
+                  className="w-full bg-slate-900 border border-white/10 text-white px-3 py-2 rounded text-sm focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Reported By</label>
+                <input
+                  type="text"
+                  value={issueForm.reported_by}
+                  onChange={e => setIssueForm(f => ({ ...f, reported_by: e.target.value }))}
+                  placeholder="Name"
+                  className="w-full bg-slate-900 border border-white/10 text-white px-3 py-2 rounded text-sm focus:outline-none"
+                />
+              </div>
+              <button
+                onClick={logIssue}
+                disabled={savingIssue}
+                className="w-full bg-primary text-slate-900 font-black text-sm py-2 rounded hover:brightness-90 transition disabled:opacity-50"
+              >
+                {savingIssue ? 'Saving...' : 'Log Issue'}
+              </button>
+            </div>
+          )}
+
           {issues.length === 0
             ? <p className="text-slate-500 text-sm">No open issues</p>
             : <div className="space-y-3">
@@ -1189,7 +1387,15 @@ function FleetTab() {
                   <div key={iss.id} className="border border-red-500/20 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-1">
                       <span className="font-black text-white">{iss.lorry_reg}</span>
-                      <Badge label={iss.issue_type} color="bg-red-900/40 text-red-400" />
+                      <div className="flex items-center gap-2">
+                        <Badge label={iss.issue_type} color="bg-red-900/40 text-red-400" />
+                        <button
+                          onClick={() => resolveIssue(iss.id)}
+                          className="text-[10px] font-black text-green-400 border border-green-500/30 px-2 py-0.5 rounded hover:bg-green-900/20 transition"
+                        >
+                          Resolve
+                        </button>
+                      </div>
                     </div>
                     <p className="text-sm text-slate-400">{iss.description}</p>
                     <p className="text-xs text-slate-500 mt-1">Reported by {iss.reported_by}</p>
@@ -1197,6 +1403,99 @@ function FleetTab() {
                 ))}
               </div>
           }
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Map Tab ─────────────────────────────────────────────────────────────────
+
+function MapTab() {
+  const [skips, setSkips] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [mapLoaded, setMapLoaded] = useState(false)
+
+  useEffect(() => {
+    loadMapData()
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link')
+      link.id = 'leaflet-css'
+      link.rel = 'stylesheet'
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+      document.head.appendChild(link)
+      const script = document.createElement('script')
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+      script.async = true
+      script.onload = () => setMapLoaded(true)
+      document.head.appendChild(script)
+    } else {
+      setMapLoaded(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (mapLoaded && skips.length > 0) initMap()
+  }, [mapLoaded, skips])
+
+  async function loadMapData() {
+    const { data } = await supabase.from('inventory').select('*').in('status', ['In Use', 'Delivered'])
+    setSkips(data ?? [])
+    setLoading(false)
+  }
+
+  function initMap() {
+    const L = (window as any).L
+    if (!L) return
+    const container = L.DomUtil.get('office-map-canvas')
+    if (container) (container as any)._leaflet_id = null
+    const map = L.map('office-map-canvas').setView([55.9533, -3.1883], 11)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map)
+    const markers = skips.filter(s => s.latitude && s.longitude).map(skip => {
+      const marker = L.marker([skip.latitude, skip.longitude]).addTo(map)
+      marker.bindPopup(`<div style="font-family:sans-serif;"><b style="color:#10b981;">${skip.skip_size}yd Skip</b><br/><b>${skip.customer_name}</b><br/><small>${skip.delivery_address}</small></div>`)
+      return marker
+    })
+    if (markers.length > 0) {
+      const group = new L.featureGroup(markers)
+      map.fitBounds(group.getBounds().pad(0.1))
+    }
+  }
+
+  if (loading) return <div className="p-10 text-center text-slate-500 font-black uppercase tracking-widest animate-pulse">Loading map data...</div>
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-black text-white">Live Skip Map</h2>
+          <p className="text-xs text-slate-500">{skips.filter(s => s.latitude).length} skips with GPS · {skips.length} total deployed</p>
+        </div>
+        <button onClick={loadMapData} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded text-xs font-black transition-all">↻ Refresh</button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4" style={{ height: '560px' }}>
+        <div className="lg:col-span-3 bg-slate-900 rounded-xl overflow-hidden relative border border-white/5">
+          <div id="office-map-canvas" className="w-full h-full" />
+          {!skips.some(s => s.latitude) && (
+            <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center text-center p-10">
+              <span className="text-5xl mb-4">📡</span>
+              <h4 className="text-white font-black uppercase">No GPS Data Yet</h4>
+              <p className="text-slate-400 text-sm mt-2 max-w-xs">New jobs will appear here automatically when drivers complete them via the driver app.</p>
+            </div>
+          )}
+        </div>
+        <div className="space-y-2 overflow-y-auto">
+          {skips.map(skip => (
+            <div key={skip.id} className="bg-slate-900 border border-white/5 rounded-lg p-3">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-xs font-black text-primary">{skip.skip_size}yd</span>
+                <span className={`text-[10px] font-bold ${skip.latitude ? 'text-emerald-400' : 'text-slate-600'}`}>{skip.latitude ? '🛰 GPS' : 'No GPS'}</span>
+              </div>
+              <p className="font-bold text-white text-sm truncate">{skip.customer_name}</p>
+              <p className="text-[10px] text-slate-500 truncate">{skip.delivery_address || 'Unknown'}</p>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -1223,15 +1522,34 @@ export default function OfficePage() {
 
   useEffect(() => {
     loadDash()
-    // Auto-refresh every 2 minutes
     const interval = setInterval(loadDash, 120000)
-    // Real-time: refresh dashboard on key table changes
+
     const ch = supabase.channel('office-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'active_tippers' }, loadDash)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, loadDash)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, loadDash)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cash_log' }, loadDash)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'active_tippers' }, (payload) => {
+        loadDash()
+        if (payload.eventType === 'INSERT') toast('🚛 New tipper in yard', { duration: 4000 })
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+        loadDash()
+        const o = payload.new as any
+        toast.success(`📋 New booking: ${o.job_type || 'Order'} — ${o.customer_name || 'Customer'}`, { duration: 6000 })
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
+        loadDash()
+        const o = payload.new as any
+        if (o.status === 'Completed') {
+          toast.success(`✅ Job completed: ${o.customer_name || 'Order'} · ${o.address || ''}`, { duration: 5000 })
+        } else if (o.status === 'Aborted') {
+          toast.error(`⛔ Job aborted: ${o.customer_name || 'Order'}`, { duration: 5000 })
+        }
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cash_log' }, (payload) => {
+        loadDash()
+        const cl = payload.new as any
+        toast(`⚖️ Weighbridge: ${cl.customer_name || 'Customer'} — ${cl.net_weight ?? '?'}kg`, { duration: 4000 })
+      })
       .subscribe()
+
     return () => { clearInterval(interval); supabase.removeChannel(ch) }
   }, [loadDash])
 
@@ -1244,6 +1562,7 @@ export default function OfficePage() {
     { id: 'reports', label: 'Reports', icon: <FileText size={16} /> },
     { id: 'fleet', label: 'Fleet', icon: <Wrench size={16} /> },
     { id: 'inventory', label: 'Inventory', icon: <Package size={16} /> },
+    { id: 'map', label: 'Live Map', icon: <TrendingUp size={16} /> },
   ]
 
   const isConfigMissing = !process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -1305,6 +1624,7 @@ export default function OfficePage() {
         {tab === 'reports' && <ReportsTab />}
         {tab === 'fleet' && <FleetTab />}
         {tab === 'inventory' && <InventoryTab />}
+        {tab === 'map' && <MapTab />}
       </main>
     </div>
   )

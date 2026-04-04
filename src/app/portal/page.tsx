@@ -57,15 +57,19 @@ export default function CustomerPortal() {
   const [cashLogs, setCashLogs] = useState<CashLogRow[]>([])
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<'overview' | 'orders' | 'tips' | 'request' | 'details'>('overview')
+  const [payLoading, setPayLoading] = useState(false)
 
   // Login state
   const [loginName, setLoginName] = useState('')
   const [loginPin, setLoginPin] = useState('')
 
-  // Collection request state
+  // Skip hire booking request state
+  const [bookJobType, setBookJobType] = useState<'Delivery' | 'Collection' | 'Swap'>('Delivery')
+  const [bookSkipSize, setBookSkipSize] = useState('8')
   const [collAddress, setCollAddress] = useState('')
   const [collDate, setCollDate] = useState('')
   const [collNotes, setCollNotes] = useState('')
+  const [bookSubmitted, setBookSubmitted] = useState(false)
 
   // Edit contact state
   const [editPhone, setEditPhone] = useState('')
@@ -158,26 +162,30 @@ export default function CustomerPortal() {
     if (!collAddress.trim() || !collDate) return toast.error('Enter address and preferred date')
     setLoading(true)
 
+    const netPrice = DEFAULT_CONFIG.pricesSkip[bookSkipSize] ?? null
+    const priceNote = netPrice ? ` [Net: £${netPrice}]` : ''
+
     const { error } = await supabase.from('orders').insert({
       date: collDate,
       status: 'Booked' as any,
-      job_type: 'Collection' as any,
-      skip_size: 'N/A',
+      job_type: bookJobType as any,
+      skip_size: bookJobType === 'Collection' ? 'N/A' : bookSkipSize,
       address: collAddress.trim(),
       customer_id: customer!.id,
       customer_name: customer!.name,
       phone: customer!.phone,
       payment_method: 'Invoice' as any,
-      delivery_comments: `[Portal Request] ${collNotes}`.trim(),
+      delivery_comments: `[Portal Request]${priceNote}${collNotes ? ' ' + collNotes : ''}`.trim(),
     })
 
     if (error) {
       toast.error('Failed to submit request')
     } else {
-      toast.success('Collection requested! We\'ll confirm shortly.')
+      toast.success(`${bookJobType} requested! We'll confirm shortly.`)
       setCollAddress('')
       setCollDate('')
       setCollNotes('')
+      setBookSubmitted(true)
       await loadCustomerData(customer!.name)
     }
     setLoading(false)
@@ -200,6 +208,34 @@ export default function CustomerPortal() {
       setCustomer({ ...customer, phone: editPhone, email: editEmail, shipping_address: editAddress })
     }
     setLoading(false)
+  }
+
+  async function handlePayNow() {
+    if (!customer || outstanding <= 0) return
+    setPayLoading(true)
+    const unpaidOrderIds = orders
+      .filter(o => o.status === 'Completed' && !o.paid && o.payment_method === 'Invoice')
+      .map(o => o.id)
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: customer.id,
+          customerName: customer.name,
+          customerEmail: customer.email,
+          orderIds: unpaidOrderIds,
+          amount: outstanding,
+          description: `Enviroworx Invoice — ${unpaidOrderIds.length} outstanding item(s)`,
+        }),
+      })
+      const data = await res.json()
+      if (data.url) window.location.href = data.url
+      else toast.error(data.error || 'Payment failed to initialise')
+    } catch {
+      toast.error('Payment error — please call the office')
+    }
+    setPayLoading(false)
   }
 
   function handleLogout() {
@@ -261,6 +297,19 @@ export default function CustomerPortal() {
     )
   }
 
+  // Handle Stripe redirect back
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('payment') === 'success') {
+      toast.success('💳 Payment received! Your account will update shortly.')
+      window.history.replaceState({}, '', '/portal')
+    } else if (params.get('payment') === 'cancelled') {
+      toast('Payment cancelled.', { icon: 'ℹ️' })
+      window.history.replaceState({}, '', '/portal')
+    }
+  }, [screen])
+
   // ── DASHBOARD ──
   const totalSpend = getTotalSpend()
   const outstanding = getOutstanding()
@@ -289,7 +338,7 @@ export default function CustomerPortal() {
             onClick={() => setTab(t)}
             className={`px-5 py-3 text-sm font-bold whitespace-nowrap transition ${tab === t ? 'text-emerald-400 border-b-2 border-emerald-400' : 'text-slate-400 hover:text-white'}`}
           >
-            {t === 'overview' ? '📊 Overview' : t === 'orders' ? '📋 Skip Hire' : t === 'tips' ? '⚖️ Weighbridge' : t === 'request' ? '🚛 Request Collection' : '👤 My Details'}
+            {t === 'overview' ? '📊 Overview' : t === 'orders' ? '📋 Skip Hire' : t === 'tips' ? '⚖️ Weighbridge' : t === 'request' ? '🚛 Book a Skip' : '👤 My Details'}
           </button>
         ))}
       </div>
@@ -299,6 +348,22 @@ export default function CustomerPortal() {
         {/* OVERVIEW TAB */}
         {tab === 'overview' && (
           <div className="space-y-6">
+            {/* Outstanding Payment Banner */}
+            {outstanding > 0 && (
+              <div className="bg-red-900/30 border border-red-500/40 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <p className="text-red-400 font-black text-lg">£{outstanding.toFixed(2)} Outstanding</p>
+                  <p className="text-slate-400 text-sm">You have unpaid invoices on your account.</p>
+                </div>
+                <button
+                  onClick={handlePayNow}
+                  disabled={payLoading}
+                  className="bg-gradient-to-r from-emerald-500 to-emerald-700 text-white font-black px-6 py-3 rounded-xl shadow hover:from-emerald-600 transition disabled:opacity-50 whitespace-nowrap"
+                >
+                  {payLoading ? 'Redirecting...' : '💳 Pay Now'}
+                </button>
+              </div>
+            )}
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <StatCard label="Total Orders" value={String(completedOrders)} color="text-emerald-400" />
@@ -367,7 +432,17 @@ export default function CustomerPortal() {
                           'bg-amber-500/20 text-amber-400'
                         }`}>{o.status}</span>
                       </td>
-                      <td className="p-3">{o.paid ? '✅' : o.payment_method === 'Invoice' ? '📧 Invoice' : '—'}</td>
+                      <td className="p-3">
+                        {o.paid ? '✅ Paid' : o.payment_method === 'Invoice' ? (
+                          <a
+                            href={`/api/documents?type=INVOICE&orderId=${o.id}`}
+                            target="_blank"
+                            className="text-xs font-bold text-blue-400 hover:text-blue-300 underline"
+                          >
+                            📄 Invoice
+                          </a>
+                        ) : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -415,50 +490,128 @@ export default function CustomerPortal() {
           </div>
         )}
 
-        {/* REQUEST COLLECTION TAB */}
+        {/* BOOK A SKIP TAB */}
         {tab === 'request' && (
           <div className="max-w-lg mx-auto">
-            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-              <h3 className="text-lg font-bold mb-5">Request a Collection</h3>
-              <p className="text-slate-400 text-sm mb-6">
-                Submit a collection request and we&apos;ll schedule it for you. You&apos;ll get an SMS confirmation once a driver is assigned.
-              </p>
+            {bookSubmitted ? (
+              <div className="bg-slate-800 rounded-xl p-8 border border-emerald-700 text-center">
+                <div className="text-4xl mb-4">✅</div>
+                <h3 className="text-xl font-bold text-emerald-400 mb-2">Request Submitted!</h3>
+                <p className="text-slate-400 text-sm mb-6">
+                  We&apos;ll confirm your {bookJobType.toLowerCase()} and send an SMS once a driver is assigned.
+                </p>
+                <button
+                  onClick={() => setBookSubmitted(false)}
+                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-white font-bold transition"
+                >
+                  Book Another
+                </button>
+              </div>
+            ) : (
+              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 space-y-5">
+                <div>
+                  <h3 className="text-lg font-bold mb-1">Book a Skip / Collection</h3>
+                  <p className="text-slate-400 text-sm">Request a skip hire or collection. You&apos;ll get SMS confirmation once a driver is assigned.</p>
+                </div>
 
-              <label className="block text-slate-400 text-sm font-bold mb-2">Collection Address</label>
-              <input
-                type="text"
-                value={collAddress}
-                onChange={e => setCollAddress(e.target.value)}
-                placeholder="e.g. 14 High Street, Edinburgh"
-                className="w-full p-3 rounded-lg bg-slate-900 border border-slate-600 text-white mb-4 focus:border-emerald-500 focus:outline-none"
-              />
+                {/* Job Type */}
+                <div>
+                  <label className="block text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">Job Type</label>
+                  <div className="flex gap-2">
+                    {(['Delivery', 'Collection', 'Swap'] as const).map(jt => (
+                      <button
+                        key={jt}
+                        onClick={() => setBookJobType(jt)}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${bookJobType === jt ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-600'}`}
+                      >
+                        {jt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              <label className="block text-slate-400 text-sm font-bold mb-2">Preferred Date</label>
-              <input
-                type="date"
-                value={collDate}
-                onChange={e => setCollDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-                className="w-full p-3 rounded-lg bg-slate-900 border border-slate-600 text-white mb-4 focus:border-emerald-500 focus:outline-none"
-              />
+                {/* Skip Size + Price */}
+                {bookJobType !== 'Collection' && (
+                  <div>
+                    <label className="block text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">Skip Size</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {Object.entries(DEFAULT_CONFIG.pricesSkip).map(([size, price]) => (
+                        <button
+                          key={size}
+                          onClick={() => setBookSkipSize(size)}
+                          className={`py-3 rounded-lg text-center transition ${bookSkipSize === size ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-600'}`}
+                        >
+                          <div className="font-black text-lg">{size}yd</div>
+                          <div className="text-xs opacity-70">£{price}</div>
+                        </button>
+                      ))}
+                    </div>
+                    {bookSkipSize && DEFAULT_CONFIG.pricesSkip[bookSkipSize] && (
+                      <div className="mt-3 p-3 bg-emerald-900/30 border border-emerald-700/50 rounded-lg">
+                        <p className="text-emerald-400 font-bold text-sm">
+                          Estimated price: £{DEFAULT_CONFIG.pricesSkip[bookSkipSize]} + VAT
+                          <span className="text-slate-400 font-normal ml-2">(= £{(DEFAULT_CONFIG.pricesSkip[bookSkipSize] * (1 + DEFAULT_CONFIG.vatRate)).toFixed(0)} inc VAT)</span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-              <label className="block text-slate-400 text-sm font-bold mb-2">Notes (optional)</label>
-              <textarea
-                value={collNotes}
-                onChange={e => setCollNotes(e.target.value)}
-                placeholder="Any access instructions or details"
-                rows={3}
-                className="w-full p-3 rounded-lg bg-slate-900 border border-slate-600 text-white mb-6 focus:border-emerald-500 focus:outline-none resize-none"
-              />
+                {/* Address */}
+                <div>
+                  <label className="block text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">
+                    {bookJobType === 'Collection' ? 'Collection Address' : 'Delivery Address'}
+                  </label>
+                  <input
+                    type="text"
+                    value={collAddress}
+                    onChange={e => setCollAddress(e.target.value)}
+                    placeholder={customer?.shipping_address || 'e.g. 14 High Street, Edinburgh'}
+                    className="w-full p-3 rounded-lg bg-slate-900 border border-slate-600 text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                  {customer?.shipping_address && !collAddress && (
+                    <button
+                      onClick={() => setCollAddress(customer.shipping_address ?? '')}
+                      className="mt-1 text-xs text-emerald-400 hover:underline"
+                    >
+                      Use saved address: {customer.shipping_address}
+                    </button>
+                  )}
+                </div>
 
-              <button
-                onClick={handleCollectionRequest}
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-emerald-500 to-emerald-700 p-4 rounded-xl text-white font-bold text-lg shadow-lg hover:from-emerald-600 transition disabled:opacity-50"
-              >
-                {loading ? 'Submitting...' : 'Submit Collection Request'}
-              </button>
-            </div>
+                {/* Date */}
+                <div>
+                  <label className="block text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">Preferred Date</label>
+                  <input
+                    type="date"
+                    value={collDate}
+                    onChange={e => setCollDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full p-3 rounded-lg bg-slate-900 border border-slate-600 text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">Notes (optional)</label>
+                  <textarea
+                    value={collNotes}
+                    onChange={e => setCollNotes(e.target.value)}
+                    placeholder="Access instructions, gate codes, any special requirements..."
+                    rows={3}
+                    className="w-full p-3 rounded-lg bg-slate-900 border border-slate-600 text-white focus:border-emerald-500 focus:outline-none resize-none"
+                  />
+                </div>
+
+                <button
+                  onClick={handleCollectionRequest}
+                  disabled={loading || !collDate || !collAddress.trim()}
+                  className="w-full bg-gradient-to-r from-emerald-500 to-emerald-700 p-4 rounded-xl text-white font-bold text-lg shadow-lg hover:from-emerald-600 transition disabled:opacity-50"
+                >
+                  {loading ? 'Submitting...' : `Request ${bookJobType}`}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
