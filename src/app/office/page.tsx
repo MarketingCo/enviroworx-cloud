@@ -1103,6 +1103,22 @@ function ReportsTab() {
     setLoading(null)
   }
 
+  async function handleDriveSync() {
+    setLoading('DRIVE')
+    try {
+      const res = await fetch(`/api/cron/monthly-sepa?start=${startDate}&end=${endDate}`)
+      const data = await res.json()
+      if (data.success) {
+        toast.success(`Synced ${data.count} items to Google Drive!`)
+      } else {
+        toast.error(data.message || 'No data found for sync')
+      }
+    } catch (e: any) {
+      toast.error('Sync failed: ' + e.message)
+    }
+    setLoading(null)
+  }
+
   const reports = [
     { type: 'SEPA', label: 'SEPA Report', desc: 'Waste transfer logs for Scottish Environment Protection Agency compliance' },
     { type: 'FINANCE', label: 'Finance Report', desc: 'Cash log with costs, payments, and outstanding balances' },
@@ -1126,6 +1142,19 @@ function ReportsTab() {
       </div>
 
       <div className="space-y-3">
+        <button
+          onClick={handleDriveSync}
+          disabled={!!loading}
+          className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all shadow-xl shadow-indigo-500/10 flex items-center justify-center gap-3"
+        >
+          {loading === 'DRIVE' ? <RefreshCw className="animate-spin" size={18} /> : <FileSpreadsheet size={18} />}
+          {loading === 'DRIVE' ? 'Syncing...' : 'Sync SEPA to Google Drive'}
+        </button>
+
+        <div className="pt-4 pb-2 text-center">
+          <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-600">— OR DOWNLOAD LOCAL CSV —</span>
+        </div>
+
         {reports.map(r => (
           <div key={r.type} className="bg-slate-900 border border-white/5 rounded-xl p-5 flex items-center justify-between gap-4">
             <div>
