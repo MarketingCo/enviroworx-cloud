@@ -58,7 +58,7 @@ export async function getDashboardStats() {
   // Calculate estimated profit with dynamic disposal rates
   const totalRev = revenueData?.reduce((sum, r) => sum + (r.cost_gross || 0), 0) ?? 0
   const estDisposalCost = revenueData?.reduce((sum, r) => {
-    const rate = DEFAULT_CONFIG.disposalCosts[r.waste_type] || 130 // Fallback to 130
+    const rate = DEFAULT_CONFIG.disposalCosts[r.waste_type || 'Mix Con'] || 130 
     const tonnage = (r.net_weight || 0) / 1000
     return sum + (tonnage * rate)
   }, 0) ?? 0
