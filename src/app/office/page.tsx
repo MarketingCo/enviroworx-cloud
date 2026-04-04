@@ -789,7 +789,7 @@ function BookingsTab() {
         permitWeeks: form.permitWeeks,
         latitude: form.latitude,
         longitude: form.longitude
-      })
+      } as any)
       result.success ? toast.success(result.message) : toast.error(result.message)
       if (result.success) {
         setForm(f => ({ ...f, customerName: '', phone: '', address: '', deliveryComments: '', latitude: null, longitude: null }))
