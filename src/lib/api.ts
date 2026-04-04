@@ -52,13 +52,16 @@ export async function getDashboardStats() {
     supabase.from('v_driver_hours_today').select('*'),
     supabase.from('v_collections_due').select('*'),
     supabase.from('permits').select('*').lte('expiry_date', expiryCutoff).neq('status', 'Expired'),
-    supabase.from('cash_log').select('cost_gross, net_weight').gte('logged_at', today + 'T00:00:00')
+    supabase.from('cash_log').select('cost_gross, net_weight, waste_type').gte('logged_at', today + 'T00:00:00')
   ])
 
-  // Calculate estimated profit
+  // Calculate estimated profit with dynamic disposal rates
   const totalRev = revenueData?.reduce((sum, r) => sum + (r.cost_gross || 0), 0) ?? 0
-  const totalTonnage = (revenueData?.reduce((sum, r) => sum + (r.net_weight || 0), 0) ?? 0) / 1000
-  const estDisposalCost = totalTonnage * 120 // Assume £120/tonne average
+  const estDisposalCost = revenueData?.reduce((sum, r) => {
+    const rate = DEFAULT_CONFIG.disposalCosts[r.waste_type] || 130 // Fallback to 130
+    const tonnage = (r.net_weight || 0) / 1000
+    return sum + (tonnage * rate)
+  }, 0) ?? 0
 
   return {
     stats: {
@@ -559,10 +562,9 @@ export async function clockInOut(driverName: string, pin: string, action: 'IN' |
 export async function searchCustomers(query: string) {
   const { data } = await supabase
     .from('customers')
-    .select('id, name, phone, billing_address, account_balance')
+    .select('id, name, phone, billing_address, account_balance, updated_at')
     .ilike('name', `%${query}%`)
     .limit(10)
-
   return data ?? []
 }
 

@@ -684,9 +684,18 @@ function WeighbridgeTab() {
               <div className="absolute z-10 w-full bg-slate-800 border border-white/10 rounded-lg mt-1 shadow-2xl max-h-48 overflow-y-auto">
                 {suggestions.map((c: any) => (
                   <button key={c.id} onClick={() => selectSuggestion(c)}
-                    className="w-full text-left px-4 py-2 hover:bg-slate-700 text-sm text-white flex justify-between border-b border-white/5">
-                    <span className="font-bold">{c.name}</span>
-                    <span className="text-[10px] text-slate-500">{c.phone}</span>
+                    className="w-full text-left px-4 py-2 hover:bg-slate-700 text-sm text-white flex justify-between border-b border-white/5 group transition-colors">
+                    <div className="flex-1 min-w-0 pr-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold truncate">{c.name}</span>
+                        {c.updated_at && (
+                          <span className="text-[8px] font-black uppercase tracking-tighter px-1 rounded bg-slate-900 text-slate-500 group-hover:text-slate-300">
+                            Active {new Date(c.updated_at).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-slate-500 shrink-0">{c.phone}</span>
                   </button>
                 ))}
               </div>
@@ -904,12 +913,19 @@ function BookingsTab() {
             <div className="absolute z-10 w-full bg-slate-800 border border-white/10 rounded-lg mt-1 shadow-xl">
               {suggestions.map((c: any) => (
                 <button key={c.id} onClick={() => selectSuggestion(c)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-slate-700 text-sm text-white flex justify-between items-center">
-                  <div>
-                    <span className="font-bold">{c.name}</span>
-                    <p className="text-[10px] text-slate-500">{c.billing_address || 'No address'}</p>
+                  className="w-full text-left px-4 py-2.5 hover:bg-slate-700 text-sm text-white flex justify-between items-center group transition-colors">
+                  <div className="flex-1 min-w-0 pr-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold truncate">{c.name}</span>
+                      {c.updated_at && (
+                        <span className="text-[8px] font-black uppercase tracking-tighter px-1 rounded bg-slate-900 text-slate-500 group-hover:text-slate-300">
+                          Active {new Date(c.updated_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-500 truncate">{c.billing_address || 'No address'}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <span className={`text-xs font-black ${c.account_balance > (DEFAULT_CONFIG.creditLimit || 500) ? 'text-red-400' : 'text-slate-400'}`}>
                       {fmt(c.account_balance || 0)}
                     </span>
@@ -1775,19 +1791,29 @@ function MapTab() {
 
     // 3. Trucks
     if (visibleLayers['Live Trucks']) {
-      const truckIcon = L.divIcon({
-        className: 'bg-transparent',
-        html: '<div style="font-size:24px;text-shadow:0 2px 4px rgba(0,0,0,0.5);">🚛</div>',
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
-      })
-
       vehicles.forEach(v => {
+        const lastSeen = v.last_updated ? new Date(v.last_updated) : null
+        const diffMinutes = lastSeen ? Math.floor((Date.now() - lastSeen.getTime()) / 60000) : 9999
+        const isStale = diffMinutes > 30
+        const isOffline = diffMinutes > 1440 // 24 hours
+
+        if (isOffline) return // Hide trucks offline for over a day
+
+        const truckIcon = L.divIcon({
+          className: 'bg-transparent',
+          html: `<div style="font-size:24px; text-shadow:0 2px 4px rgba(0,0,0,0.5); opacity:${isStale ? '0.4' : '1'}; filter:${isStale ? 'grayscale(1)' : 'none'};">🚛</div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        })
+
         const marker = L.marker([v.latitude, v.longitude], { icon: truckIcon }).addTo(map)
         marker.bindPopup(`
           <div style="font-family:sans-serif; color:#f8fafc; min-width:150px;">
-            <div style="border-bottom:1px solid #334155; padding-bottom:6px; margin-bottom:6px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:6px; margin-bottom:6px;">
               <b style="color:#3b82f6; font-size:14px;">${v.reg}</b>
+              <span style="font-size:8px; font-weight:black; padding:2px 4px; border-radius:3px; background:${isStale ? '#334155' : '#064e3b'}; color:${isStale ? '#94a3b8' : '#34d399'};">
+                ${isStale ? 'STALE' : 'LIVE'}
+              </span>
             </div>
             <div style="font-size:12px;">
               <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
@@ -1795,12 +1821,9 @@ function MapTab() {
                 <b style="${(v.speed || 0) > 0 ? 'color:#10b981;' : ''}">${v.speed || 0} mph</b>
               </div>
               <div style="display:flex; justify-content:space-between;">
-                <span style="color:#64748b;">Status:</span>
-                <b>${(v.speed || 0) > 0 ? 'In Transit' : 'Stationary'}</b>
+                <span style="color:#64748b;">Last Seen:</span>
+                <b>${diffMinutes < 1 ? 'Just now' : `${diffMinutes}m ago`}</b>
               </div>
-            </div>
-            <div style="margin-top:8px; font-size:9px; color:#475569; text-align:right;">
-              Last Update: ${v.last_updated ? new Date(v.last_updated).toLocaleTimeString() : 'N/A'}
             </div>
           </div>
         `)

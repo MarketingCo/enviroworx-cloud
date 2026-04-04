@@ -21,6 +21,7 @@ export interface AppConfig {
   accountNumber: string
   pricesWaste: Record<string, number>
   pricesSkip: Record<string, number>
+  disposalCosts: Record<string, number>
 }
 
 // Default config (matches your Google Sheets CONFIG object)
@@ -43,6 +44,10 @@ export const DEFAULT_CONFIG: AppConfig = {
   pricesWaste: {
     'Mix Con': 165, 'Mix Mun': 200, 'Wood': 80,
     'Inert': 40, 'Soil': 40, 'Cardboard': 0, 'Metal': 0
+  },
+  disposalCosts: {
+    'Mix Con': 130, 'Mix Mun': 150, 'Wood': 60,
+    'Inert': 25, 'Soil': 25, 'Cardboard': 0, 'Metal': -50
   },
   pricesSkip: {
     '4': 180, '6': 220, '8': 250, '10': 290, '12': 330,
