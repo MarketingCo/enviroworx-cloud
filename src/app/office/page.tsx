@@ -222,11 +222,14 @@ function DashboardTab({ data, onRefresh }: { data: DashStats | null; onRefresh: 
 
 // ─── Dispatch Tab ─────────────────────────────────────────────────────────────
 
+import { syncOrderToQuickBooks } from '@/app/actions/quickbooks'
+
 function DispatchTab() {
   const [jobs, setJobs] = useState<any[]>([])
   const [drivers, setDrivers] = useState<any[]>([])
   const [dispatchDate, setDispatchDate] = useState(tomorrow())
   const [loading, setLoading] = useState(false)
+  const [sortBy, setSortBy] = useState<'time' | 'area'>('time')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -261,24 +264,58 @@ function DispatchTab() {
     load()
   }
 
-  const unassigned = jobs.filter(j => !j.driver_name)
-  const assigned = jobs.filter(j => j.driver_name)
+  async function handleQBSync(orderId: string) {
+    toast.loading('Syncing to QuickBooks...', { id: orderId })
+    const res = await syncOrderToQuickBooks(orderId)
+    if (res.success) {
+      toast.success(`Draft Invoice Created: ${res.qbId}`, { id: orderId })
+      load()
+    } else {
+      toast.error(`Sync failed: ${res.error}`, { id: orderId })
+    }
+  }
+
+  const getPostcode = (addr: string) => {
+    const match = addr.match(/[A-Z]{1,2}[0-9][A-Z0-9]? [0-9][A-Z]{2}/i) || addr.match(/[A-Z]{1,2}[0-9][A-Z0-9]?/i)
+    return match ? match[0].toUpperCase() : '??'
+  }
+
+  const sortedJobs = [...jobs].sort((a, b) => {
+    if (sortBy === 'area') return getPostcode(a.address).localeCompare(getPostcode(b.address))
+    return (a.arrive_time || '99:99').localeCompare(b.arrive_time || '99:99')
+  })
+
+  const unassigned = sortedJobs.filter(j => !j.driver_name)
+  const assigned = sortedJobs.filter(j => j.driver_name)
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-4">
-        <div>
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Dispatch Date</label>
-          <input
-            type="date"
-            value={dispatchDate}
-            onChange={e => setDispatchDate(e.target.value)}
-            className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm"
-          />
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Dispatch Date</label>
+            <input
+              type="date"
+              value={dispatchDate}
+              onChange={e => setDispatchDate(e.target.value)}
+              className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Sort By</label>
+            <select 
+              value={sortBy} 
+              onChange={e => setSortBy(e.target.value as any)}
+              className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm"
+            >
+              <option value="time">Time</option>
+              <option value="area">Postcode Area</option>
+            </select>
+          </div>
+          <button onClick={load} className="mt-5 flex items-center gap-2 bg-slate-800 border border-white/10 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
+            <RefreshCw size={14} /> Refresh
+          </button>
         </div>
-        <button onClick={load} className="mt-5 flex items-center gap-2 bg-slate-800 border border-white/10 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
-          <RefreshCw size={14} /> Refresh
-        </button>
         {unassigned.length > 0 && (
           <button onClick={handleAutoAssign} className="mt-5 flex items-center gap-2 bg-primary text-white px-4 py-2 rounded text-sm font-bold hover:bg-primary-dark">
             <Zap size={14} /> Auto-Assign ({unassigned.length})
@@ -302,6 +339,10 @@ function DispatchTab() {
           <div className="space-y-2">
             {unassigned.map((job: any) => (
               <div key={job.id} className="bg-slate-900 border border-yellow-500/20 rounded-xl p-4 flex flex-wrap items-center gap-4">
+                <div className="w-12 text-center border-r border-white/5 mr-2">
+                  <span className="text-[10px] font-black text-slate-500 block">AREA</span>
+                  <span className="text-sm font-black text-white">{getPostcode(job.address).split(' ')[0]}</span>
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge label={job.job_type} color="bg-slate-700 text-slate-300" />
@@ -336,28 +377,57 @@ function DispatchTab() {
         <div>
           <SectionHeader title={`Assigned (${assigned.length})`} />
           <div className="space-y-2">
-            {assigned.map((job: any) => (
-              <div key={job.id} className="bg-slate-900 border border-white/5 rounded-xl p-4 flex flex-wrap items-center gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge label={job.status} color={statusColor(job.status)} />
-                    <Badge label={job.job_type} color="bg-slate-700 text-slate-300" />
-                    <Badge label={job.skip_size + 'yd'} color="bg-slate-700 text-slate-300" />
+            {assigned.map((job: any) => {
+              const isSynced = job.comments?.includes('[QB Sync:')
+              return (
+                <div key={job.id} className="bg-slate-900 border border-white/5 rounded-xl p-4 flex flex-wrap items-center gap-4">
+                  <div className="w-12 text-center border-r border-white/5 mr-2">
+                    <span className="text-[10px] font-black text-slate-500 block">AREA</span>
+                    <span className="text-sm font-black text-white">{getPostcode(job.address).split(' ')[0]}</span>
                   </div>
-                  <p className="text-white font-bold mt-1">{job.customer_name}</p>
-                  <p className="text-slate-400 text-xs">{job.address}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge label={job.status} color={statusColor(job.status)} />
+                      <Badge label={job.job_type} color="bg-slate-700 text-slate-300" />
+                      <Badge label={job.skip_size + 'yd'} color="bg-slate-700 text-slate-300" />
+                    </div>
+                    <p className="text-white font-bold mt-1">{job.customer_name}</p>
+                    <p className="text-slate-400 text-xs">{job.address}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {job.status === 'Completed' && job.payment_method === 'Invoice' && (
+                      <button 
+                        onClick={() => handleQBSync(job.id)}
+                        disabled={isSynced}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-black uppercase transition-all ${
+                          isSynced ? 'bg-green-900/20 text-green-500 cursor-default' : 'bg-primary/10 text-primary hover:bg-primary hover:text-white'
+                        }`}
+                      >
+                        {isSynced ? <CheckCircle size={12} /> : <DollarSign size={12} />}
+                        {isSynced ? 'Synced to QB' : 'Sync to QB'}
+                      </button>
+                    )}
+                    <div className="flex flex-col items-end">
+                      <span className="text-primary font-black text-[10px] uppercase tracking-tighter mb-1">{job.driver_name}</span>
+                      <select
+                        className="bg-slate-800 border border-white/10 text-white px-2 py-1 rounded text-[10px]"
+                        value={job.driver_name ?? ''}
+                        onChange={e => handleAssign(job.id, e.target.value)}
+                      >
+                        <option value="">Unassign</option>
+                        {drivers.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-primary font-bold text-sm">{job.driver_name}</span>
-                  <select
-                    className="bg-slate-800 border border-white/10 text-white px-2 py-1.5 rounded text-xs"
-                    value={job.driver_name ?? ''}
-                    onChange={e => handleAssign(job.id, e.target.value)}
-                  >
-                    <option value="">Unassign</option>
-                    {drivers.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-                  </select>
-                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
               </div>
             ))}
           </div>
@@ -668,17 +738,32 @@ function WeighbridgeTab() {
 
 // ─── Bookings Tab ─────────────────────────────────────────────────────────────
 
+import { geocodeAddress } from '@/app/actions/geo'
+
 function BookingsTab() {
   const [form, setForm] = useState({
     customerName: '', phone: '', address: '', skipSize: '8',
     jobType: 'Delivery', deliveryDate: tomorrow(), paymentMethod: 'Invoice',
     deliveryComments: '', permitCheck: false, permitWeeks: 1,
+    latitude: null as number | null, longitude: null as number | null
   })
   const [loading, setLoading] = useState(false)
   const [suggestions, setSuggestions] = useState<any[]>([])
   const [searchTimer, setSearchTimer] = useState<any>(null)
+  const [geocoding, setGeocoding] = useState(false)
 
   function set(k: string, v: any) { setForm(f => ({ ...f, [k]: v })) }
+
+  async function handleAddressBlur() {
+    if (!form.address || form.address.length < 5) return
+    setGeocoding(true)
+    const coords = await geocodeAddress(form.address)
+    if (coords) {
+      setForm(f => ({ ...f, latitude: coords.lat, longitude: coords.lng }))
+      toast.success('Location verified on map')
+    }
+    setGeocoding(false)
+  }
 
   function handleNameChange(v: string) {
     set('customerName', v)
@@ -710,10 +795,12 @@ function BookingsTab() {
         ...form,
         calculatedPrice: String(skipPrice),
         permitWeeks: form.permitWeeks,
+        latitude: form.latitude,
+        longitude: form.longitude
       })
       result.success ? toast.success(result.message) : toast.error(result.message)
       if (result.success) {
-        setForm(f => ({ ...f, customerName: '', phone: '', address: '', deliveryComments: '' }))
+        setForm(f => ({ ...f, customerName: '', phone: '', address: '', deliveryComments: '', latitude: null, longitude: null }))
       }
     } catch (e: any) {
       toast.error(e.message)
@@ -766,9 +853,18 @@ function BookingsTab() {
         </div>
 
         <div>
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Address</label>
-          <input type="text" value={form.address} onChange={e => set('address', e.target.value)}
-            className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">
+            Address {geocoding && <span className="text-primary animate-pulse ml-2 text-[10px]">Verifying...</span>}
+          </label>
+          <input 
+            type="text" 
+            value={form.address} 
+            onChange={e => set('address', e.target.value)}
+            onBlur={handleAddressBlur}
+            className={`w-full bg-slate-800 border ${form.latitude ? 'border-emerald-500/50' : 'border-white/10'} text-white px-3 py-2 rounded text-sm focus:border-primary outline-none transition-colors`} 
+            placeholder="Full delivery address..."
+          />
+          {form.latitude && <p className="text-[9px] text-emerald-500 font-bold mt-1 uppercase tracking-tighter">✓ Coordinates pinned for Live Map</p>}
         </div>
 
         <div className="grid grid-cols-3 gap-4">
