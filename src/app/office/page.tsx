@@ -546,19 +546,21 @@ function WeighbridgeTab() {
     }
   }
 
+  function getWaitTime(timestamp: string) {
+    const minutes = Math.floor((Date.now() - new Date(timestamp).getTime()) / 60000)
+    if (minutes < 10) return { text: `${minutes}m wait`, color: 'text-emerald-400' }
+    if (minutes < 20) return { text: `${minutes}m wait`, color: 'text-yellow-400' }
+    return { text: `${minutes}m wait!`, color: 'text-red-400' }
+  }
+
   function loadFromTipper(t: any) {
-    // Determine which weight we are measuring now
-    const firstWeight = t.gross_weight || 0
-    const currentScale = liveWeight || 0
-    
     setForm(f => ({
       ...f,
       lorryReg: t.reg,
       customerName: t.customer_name,
       wasteType: t.waste_type,
-      // If we had a gross weight, the scale now shows the tare (or vice versa)
-      grossWeight: String(firstWeight),
-      tareWeight: String(currentScale),
+      grossWeight: String(t.gross_weight || ''),
+      tareWeight: String(liveWeight || ''),
       skipSize: t.skip_size,
       skipId: t.skip_id || '',
       address: t.address || 'Yard',
@@ -567,9 +569,8 @@ function WeighbridgeTab() {
     }))
     setManualOverride('')
     setLogMode('full')
-    toast.success(`Loaded ${t.reg || 'Truck'}. Second weight captured from scale.`)
+    toast.success(`Loaded ${t.reg || 'Truck'}. Weight captured from scale.`)
   }
-
   async function handleLogTipper() {
     const weightToUse = form.grossWeight || String(liveWeight || 0)
     const result = await logActiveTipper({
@@ -625,17 +626,23 @@ function WeighbridgeTab() {
           <SectionHeader title={`Holding Pen (${tippers.length})`} />
           {tippers.length === 0 && <p className="text-slate-500 text-sm">No trucks in yard</p>}
           <div className="space-y-2 mt-3">
-            {tippers.map((t: any) => (
-              <button key={t.id} onClick={() => loadFromTipper(t)}
-                className="w-full text-left bg-slate-800 hover:bg-slate-700 border border-white/5 hover:border-primary/50 rounded-lg p-3 transition-all">
-                <div className="flex justify-between items-center">
-                  <span className="font-black text-white">{t.reg || 'Manual'}</span>
-                  <ChevronRight size={14} className="text-primary" />
-                </div>
-                <p className="text-xs text-slate-400">{t.customer_name} · {t.waste_type} · {t.skip_size}</p>
-                <p className="text-[10px] text-slate-600 mt-0.5">{new Date(t.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>
-              </button>
-            ))}
+            {tippers.map((t: any) => {
+              const wait = getWaitTime(t.timestamp)
+              return (
+                <button key={t.id} onClick={() => loadFromTipper(t)}
+                  className="w-full text-left bg-slate-800 hover:bg-slate-700 border border-white/5 hover:border-primary/50 rounded-lg p-3 transition-all group">
+                  <div className="flex justify-between items-center">
+                    <span className="font-black text-white">{t.reg || 'Manual'}</span>
+                    <span className={`text-[10px] font-black uppercase tracking-tighter ${wait.color}`}>{wait.text}</span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">{t.customer_name} · {t.waste_type}</p>
+                  <div className="flex justify-between items-center mt-2 border-t border-white/5 pt-2">
+                    <p className="text-[9px] text-slate-600 font-bold uppercase tracking-tighter">Entered {new Date(t.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>
+                    <ChevronRight size={12} className="text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
 
