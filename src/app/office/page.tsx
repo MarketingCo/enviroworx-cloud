@@ -595,12 +595,29 @@ function WeighbridgeTab() {
       amountPaid: form.amountPaid ? Number(form.amountPaid) : 0,
       wbNotes: form.wbNotes, tipperRowIndex: form.tipperRowIndex,
     })
-    result.success ? toast.success(result.message) : toast.error(result.message)
+    
     if (result.success) {
+      toast.success((t) => (
+        <div className="flex flex-col gap-2">
+          <span>{result.message}</span>
+          <button 
+            onClick={() => {
+              window.open(`/api/documents?type=WTN&ticketNumber=${(result as any).ticketNumber}`, '_blank')
+              toast.dismiss(t.id)
+            }}
+            className="bg-white text-slate-900 px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-widest shadow-xl"
+          >
+            🖨️ Print Ticket
+          </button>
+        </div>
+      ), { duration: 10000 })
+
       setForm(f => ({ ...f, lorryReg: '', customerName: '', grossWeight: '', tareWeight: '', skipId: '', amountPaid: '', wbNotes: '', tipperRowIndex: '' }))
       setManualOverride('')
       setTareMsg('')
       setLogMode('tipper')
+    } else {
+      toast.error(result.message)
     }
   }
 
@@ -1796,25 +1813,33 @@ function MapTab() {
       vehicles.forEach(v => {
         const lastSeen = v.last_updated ? new Date(v.last_updated) : null
         const diffMinutes = lastSeen ? Math.floor((Date.now() - lastSeen.getTime()) / 60000) : 9999
+        const isStationary = (v.speed || 0) === 0
+        const isIdle = isStationary && diffMinutes > 20 && diffMinutes < 180 // Idle between 20m and 3h
         const isStale = diffMinutes > 30
         const isOffline = diffMinutes > 1440 // 24 hours
 
-        if (isOffline) return // Hide trucks offline for over a day
+        if (isOffline) return 
 
         const truckIcon = L.divIcon({
           className: 'bg-transparent',
-          html: `<div style="font-size:24px; text-shadow:0 2px 4px rgba(0,0,0,0.5); opacity:${isStale ? '0.4' : '1'}; filter:${isStale ? 'grayscale(1)' : 'none'};">🚛</div>`,
+          html: `
+            <div class="relative">
+              ${isIdle ? '<div class="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>' : ''}
+              ${isIdle ? '<div class="absolute -top-1 -right-1 w-3 h-3 bg-red-600 rounded-full border-2 border-white shadow-sm"></div>' : ''}
+              <div style="font-size:24px; text-shadow:0 2px 4px rgba(0,0,0,0.5); opacity:${isStale ? '0.4' : '1'}; filter:${isStale ? 'grayscale(1)' : 'none'};">🚛</div>
+            </div>
+          `,
           iconSize: [24, 24],
           iconAnchor: [12, 12]
         })
 
         const marker = L.marker([v.latitude, v.longitude], { icon: truckIcon }).addTo(map)
         marker.bindPopup(`
-          <div style="font-family:sans-serif; color:#f8fafc; min-width:150px;">
+          <div style="font-family:sans-serif; color:#f8fafc; min-width:160px;">
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:6px; margin-bottom:6px;">
               <b style="color:#3b82f6; font-size:14px;">${v.reg}</b>
-              <span style="font-size:8px; font-weight:black; padding:2px 4px; border-radius:3px; background:${isStale ? '#334155' : '#064e3b'}; color:${isStale ? '#94a3b8' : '#34d399'};">
-                ${isStale ? 'STALE' : 'LIVE'}
+              <span style="font-size:8px; font-weight:black; padding:2px 4px; border-radius:3px; background:${isIdle ? '#7f1d1d' : (isStale ? '#334155' : '#064e3b')}; color:${isIdle ? '#fecaca' : (isStale ? '#94a3b8' : '#34d399')};">
+                ${isIdle ? 'IDLE ALERT' : (isStale ? 'STALE' : 'LIVE')}
               </span>
             </div>
             <div style="font-size:12px;">
@@ -1826,6 +1851,7 @@ function MapTab() {
                 <span style="color:#64748b;">Last Seen:</span>
                 <b>${diffMinutes < 1 ? 'Just now' : `${diffMinutes}m ago`}</b>
               </div>
+              ${isIdle ? `<p style="margin-top:8px; color:#f87171; font-weight:bold; font-size:10px; text-align:center; background:#450a0a; padding:4px; border-radius:4px;">⚠️ Stationary for ${diffMinutes}m</p>` : ''}
             </div>
           </div>
         `)
