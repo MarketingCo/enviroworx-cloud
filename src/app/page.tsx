@@ -47,12 +47,13 @@ export default function Home() {
           </Link>
           <div className="flex items-center gap-8">
             <nav className="hidden md:flex items-center gap-8 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">
-              <Link href="#platform" className="hover:text-white transition-colors">Platform</Link>
-              <Link href="#infrastructure" className="hover:text-white transition-colors">Infrastructure</Link>
+              <Link href="/office" className="text-brand-green hover:text-white transition-colors">Office Portal</Link>
+              <Link href="/driver" className="hover:text-white transition-colors">Driver App</Link>
+              <Link href="/portal" className="hover:text-white transition-colors">Client Portal</Link>
               <Link href="/login" className="text-white border-l border-white/10 pl-8">Login</Link>
             </nav>
-            <Link href="#contact" className="bg-white text-slate-950 px-6 py-2 rounded font-black uppercase text-[10px] tracking-widest hover:bg-brand-green transition-all shadow-xl shadow-brand-green/10">
-              Deploy Instance
+            <Link href="/office" className="bg-white text-slate-950 px-6 py-2 rounded font-black uppercase text-[10px] tracking-widest hover:bg-brand-green transition-all shadow-xl shadow-brand-green/10">
+              Launch Instance
             </Link>
           </div>
         </div>
