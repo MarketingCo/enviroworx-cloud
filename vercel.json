@@ -5,5 +5,15 @@
   "installCommand": "npm install",
   "env": {
     "NEXT_PUBLIC_SUPABASE_URL": "https://iuodjkeygsqthlpfjkwj.supabase.co"
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/verizon-sync",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/monthly-sepa",
+      "schedule": "0 0 1 * *"
+    }
+  ]
 }

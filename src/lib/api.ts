@@ -11,6 +11,7 @@
  */
 import { supabase, supabaseAdmin } from './supabase'
 import { DEFAULT_CONFIG, type AppConfig } from './config'
+import { logToDrive } from '@/app/actions/drive'
 
 // ============================================================
 // DASHBOARD DATA (replaces getBusinessData & getRawDashboardData)
@@ -331,6 +332,18 @@ export async function processWeightLog(form: {
     tyl_ref: form.tylRef || null,
     comments: form.wbNotes || null,
   })
+
+  if (form.paymentMethod === 'Cash') {
+    await logToDrive({
+      date: new Date().toISOString(),
+      ticketNumber: weightLog.ticket_number || '',
+      customerName: form.customerName,
+      address: form.address,
+      amountPaid: form.amountPaid || 0,
+      costGross: costGross,
+      paymentMethod: 'Cash'
+    }).catch(console.error);
+  }
 
   // Insert weighbridge reading
   await supabase.from('weighbridge_readings').insert({

@@ -18,6 +18,12 @@ export type Database = {
         Update: { address?: string | null; customer_name?: string | null; gross_weight?: number | null; id?: string; reg?: string; skip_id?: string | null; skip_size?: string | null; timestamp?: string | null; waste_type?: string | null }
         Relationships: []
       }
+      external_map_points: {
+        Row: { created_at: string | null; description: string | null; folder: string | null; id: string; latitude: number; longitude: number; metadata: Json | null; name: string; style_url: string | null; updated_at: string | null }
+        Insert: { created_at?: string | null; description?: string | null; folder?: string | null; id?: string; latitude: number; longitude: number; metadata?: Json | null; name: string; style_url?: string | null; updated_at?: string | null }
+        Update: { created_at?: string | null; description?: string | null; folder?: string | null; id?: string; latitude?: number; longitude?: number; metadata?: Json | null; name?: string; style_url?: string | null; updated_at?: string | null }
+        Relationships: []
+      }
       archive_orders: {
         Row: { archived_at: string | null; data: Json | null; id: string; original_id: string | null }
         Insert: { archived_at?: string | null; data?: Json | null; id?: string; original_id?: string | null }

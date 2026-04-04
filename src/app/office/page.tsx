@@ -21,6 +21,7 @@ import {
 } from '@/lib/api'
 import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
 import toast, { Toaster } from 'react-hot-toast'
+import KmlSyncButton from '@/components/KmlSyncButton'
 import {
   LayoutDashboard,
   Truck,
@@ -1413,8 +1414,12 @@ function FleetTab() {
 
 function MapTab() {
   const [skips, setSkips] = useState<any[]>([])
+  const [vehicles, setVehicles] = useState<any[]>([])
+  const [liveOrders, setLiveOrders] = useState<any[]>([])
+  const [externalPoints, setExternalPoints] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [mapLoaded, setMapLoaded] = useState(false)
+  const [showExternal, setShowExternal] = useState(false) // Default to false to prioritize live data
 
   useEffect(() => {
     loadMapData()
@@ -1432,15 +1437,40 @@ function MapTab() {
     } else {
       setMapLoaded(true)
     }
+
+    // Set up realtime sync for the map
+    const mapSync = supabase.channel('map-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => loadMapData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => loadMapData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, () => loadMapData())
+      .subscribe()
+
+    return () => { supabase.removeChannel(mapSync) }
   }, [])
 
   useEffect(() => {
-    if (mapLoaded && skips.length > 0) initMap()
-  }, [mapLoaded, skips])
+    if (mapLoaded && (!loading)) initMap()
+  }, [mapLoaded, skips, vehicles, liveOrders, externalPoints, loading, showExternal])
 
   async function loadMapData() {
-    const { data } = await supabase.from('inventory').select('*').in('status', ['In Use', 'Delivered'])
-    setSkips(data ?? [])
+    const today = new Date().toISOString().split('T')[0]
+    
+    const [
+      { data: sData },
+      { data: vData },
+      { data: oData },
+      { data: eData }
+    ] = await Promise.all([
+      supabase.from('inventory').select('*').in('status', ['In Use', 'Delivered']),
+      supabase.from('vehicles').select('*').not('latitude', 'is', null),
+      supabase.from('orders').select('*').eq('date', today).not('latitude', 'is', null),
+      supabase.from('external_map_points').select('*')
+    ])
+
+    setSkips(sData ?? [])
+    setVehicles(vData ?? [])
+    setLiveOrders(oData ?? [])
+    setExternalPoints(eData ?? [])
     setLoading(false)
   }
 
@@ -1451,13 +1481,76 @@ function MapTab() {
     if (container) (container as any)._leaflet_id = null
     const map = L.map('office-map-canvas').setView([55.9533, -3.1883], 11)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map)
-    const markers = skips.filter(s => s.latitude && s.longitude).map(skip => {
-      const marker = L.marker([skip.latitude, skip.longitude]).addTo(map)
-      marker.bindPopup(`<div style="font-family:sans-serif;"><b style="color:#10b981;">${skip.skip_size}yd Skip</b><br/><b>${skip.customer_name}</b><br/><small>${skip.delivery_address}</small></div>`)
-      return marker
+    
+    const allMarkers: any[] = []
+
+    // 1. Live Orders (Deliveries & Collections Today)
+    liveOrders.forEach(o => {
+      const isCollection = o.job_type === 'Collection'
+      const icon = L.divIcon({
+        className: 'bg-transparent',
+        html: `<div style="font-size:24px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">${isCollection ? '📥' : '📦'}</div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      })
+      const marker = L.marker([o.latitude, o.longitude], { icon }).addTo(map)
+      marker.bindPopup(`<div style="font-family:sans-serif;"><b style="color:${isCollection ? '#f59e0b' : '#3b82f6'};">${o.job_type} TODAY</b><br/><b>${o.customer_name}</b><br/><small>${o.address}</small><br/><span style="font-size:10px;color:#64748b;">Status: ${o.status}</span></div>`)
+      allMarkers.push(marker)
     })
-    if (markers.length > 0) {
-      const group = new L.featureGroup(markers)
+
+    // 2. Delivered Skips (Static Inventory)
+    skips.filter(s => s.latitude && s.longitude).forEach(skip => {
+      const icon = L.divIcon({
+        className: 'bg-transparent',
+        html: '<div style="font-size:20px;">🏗️</div>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+      })
+      const marker = L.marker([skip.latitude, skip.longitude], { icon }).addTo(map)
+      marker.bindPopup(`<div style="font-family:sans-serif;"><b style="color:#10b981;">${skip.skip_size}yd Skip (DELIVERED)</b><br/><b>${skip.customer_name}</b><br/><small>${skip.delivery_address}</small></div>`)
+      allMarkers.push(marker)
+    })
+
+    // 3. Live Vehicles (Trucks)
+    const truckIcon = L.divIcon({
+      className: 'bg-transparent',
+      html: '<div style="font-size:24px;text-shadow:0 2px 4px rgba(0,0,0,0.5);">🚛</div>',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    })
+
+    vehicles.forEach(v => {
+      const marker = L.marker([v.latitude, v.longitude], { icon: truckIcon }).addTo(map)
+      marker.bindPopup(`<div style="font-family:sans-serif;"><b style="color:#3b82f6;">${v.reg}</b><br/>Speed: ${v.speed || 0} mph<br/><small>Last seen: ${v.last_updated ? new Date(v.last_updated).toLocaleTimeString() : 'Unknown'}</small></div>`)
+      allMarkers.push(marker)
+    })
+
+    // 4. External KML Points (Legacy)
+    if (showExternal) {
+      const getIconHtml = (folder: string) => {
+        let emoji = '📍'
+        if (folder.includes('Collections')) emoji = '📤'
+        if (folder.includes('Delivered')) emoji = '✅'
+        if (folder.includes('OUT FOR DELIVERY')) emoji = '🚚'
+        if (folder.match(/Monday|Tuesday|Wednesday|Thursday|Friday|Saturday/i)) emoji = '📅'
+        return `<div style="font-size:20px;opacity:0.6;">${emoji}</div>`
+      }
+
+      externalPoints.forEach(p => {
+        const icon = L.divIcon({
+          className: 'bg-transparent',
+          html: getIconHtml(p.folder),
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        })
+        const marker = L.marker([p.latitude, p.longitude], { icon }).addTo(map)
+        marker.bindPopup(`<div style="font-family:sans-serif;"><b style="color:#64748b;">${p.folder} (LEGACY)</b><br/><b>${p.name}</b><br/><small>${p.description}</small></div>`)
+        allMarkers.push(marker)
+      })
+    }
+
+    if (allMarkers.length > 0) {
+      const group = new L.featureGroup(allMarkers)
       map.fitBounds(group.getBounds().pad(0.1))
     }
   }
@@ -1468,29 +1561,51 @@ function MapTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-black text-white">Live Skip Map</h2>
-          <p className="text-xs text-slate-500">{skips.filter(s => s.latitude).length} skips with GPS · {skips.length} total deployed</p>
+          <h2 className="text-lg font-black text-white">Live Automated Map Board</h2>
+          <p className="text-xs text-slate-500">
+            {liveOrders.length} orders today · {skips.length} active skips · {vehicles.length} trucks tracking
+          </p>
         </div>
-        <button onClick={loadMapData} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded text-xs font-black transition-all">↻ Refresh</button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setShowExternal(!showExternal)} 
+            className={`${showExternal ? 'bg-indigo-600' : 'bg-slate-800'} text-white px-4 py-2 rounded text-xs font-black transition-all`}
+          >
+            {showExternal ? 'Hide' : 'Show'} Legacy KML
+          </button>
+          <KmlSyncButton />
+          <button onClick={loadMapData} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded text-xs font-black transition-all">↻ Force Refresh</button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4" style={{ height: '560px' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4" style={{ height: '600px' }}>
         <div className="lg:col-span-3 bg-slate-900 rounded-xl overflow-hidden relative border border-white/5">
           <div id="office-map-canvas" className="w-full h-full" />
-          {!skips.some(s => s.latitude) && (
+          {liveOrders.length === 0 && skips.length === 0 && (
             <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center text-center p-10">
               <span className="text-5xl mb-4">📡</span>
-              <h4 className="text-white font-black uppercase">No GPS Data Yet</h4>
-              <p className="text-slate-400 text-sm mt-2 max-w-xs">New jobs will appear here automatically when drivers complete them via the driver app.</p>
+              <h4 className="text-white font-black uppercase">No Live Data Yet</h4>
+              <p className="text-slate-400 text-sm mt-2 max-w-xs">New orders and delivered skips will appear here automatically as you work.</p>
             </div>
           )}
         </div>
         <div className="space-y-2 overflow-y-auto">
+          <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Live Activity</h3>
+          {liveOrders.map(o => (
+            <div key={o.id} className="bg-slate-900 border border-white/5 rounded-lg p-3">
+              <div className="flex justify-between items-center mb-1">
+                <span className={`text-[10px] font-black uppercase ${o.job_type === 'Collection' ? 'text-amber-500' : 'text-blue-500'}`}>{o.job_type}</span>
+                <span className="text-[9px] font-bold text-slate-500">{o.status}</span>
+              </div>
+              <p className="font-bold text-white text-sm truncate">{o.customer_name}</p>
+              <p className="text-[10px] text-slate-500 truncate">{o.address}</p>
+            </div>
+          ))}
           {skips.map(skip => (
             <div key={skip.id} className="bg-slate-900 border border-white/5 rounded-lg p-3">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-xs font-black text-primary">{skip.skip_size}yd</span>
-                <span className={`text-[10px] font-bold ${skip.latitude ? 'text-emerald-400' : 'text-slate-600'}`}>{skip.latitude ? '🛰 GPS' : 'No GPS'}</span>
+                <span className="text-[10px] font-black text-emerald-500 uppercase">{skip.skip_size}yd Skip</span>
+                <span className="text-[9px] font-bold text-slate-500">Delivered</span>
               </div>
               <p className="font-bold text-white text-sm truncate">{skip.customer_name}</p>
               <p className="text-[10px] text-slate-500 truncate">{skip.delivery_address || 'Unknown'}</p>
