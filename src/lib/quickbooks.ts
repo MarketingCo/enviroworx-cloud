@@ -10,7 +10,7 @@ async function getQBConfig() {
   const { data: config } = await supabaseAdmin
     .from('config')
     .select('*')
-    .eq('id', 'quickbooks_auth')
+    .eq('key', 'quickbooks_auth')
     .single()
   return config?.value || {}
 }
@@ -24,7 +24,7 @@ export async function createDraftInvoice(order: {
   id: string,
   amount: number
 }) {
-  const config = await getQBConfig()
+  const config = await getQBConfig() as any
   const { accessToken, realmId, clientId, clientSecret, refreshToken } = config
 
   if (!accessToken || !realmId) {

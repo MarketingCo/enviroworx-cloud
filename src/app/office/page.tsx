@@ -1494,20 +1494,50 @@ function MapTab() {
         iconAnchor: [12, 12]
       })
       const marker = L.marker([o.latitude, o.longitude], { icon }).addTo(map)
-      marker.bindPopup(`<div style="font-family:sans-serif;"><b style="color:${isCollection ? '#f59e0b' : '#3b82f6'};">${o.job_type} TODAY</b><br/><b>${o.customer_name}</b><br/><small>${o.address}</small><br/><span style="font-size:10px;color:#64748b;">Status: ${o.status}</span></div>`)
+      marker.bindPopup(`
+        <div style="font-family:sans-serif; min-width:200px; color:#f8fafc;">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px;">
+            <b style="color:${isCollection ? '#f59e0b' : '#3b82f6'}; text-transform:uppercase; font-size:10px;">${o.job_type} TODAY</b>
+            <span style="font-size:9px; background:#1e293b; padding:2px 6px; border-radius:4px; font-weight:bold;">${o.status}</span>
+          </div>
+          <b style="font-size:14px; display:block; margin-bottom:4px;">${o.customer_name}</b>
+          <small style="color:#94a3b8; display:block; line-height:1.4;">📍 ${o.address}</small>
+          <div style="margin-top:10px; font-size:11px; display:grid; grid-template-cols: 1fr 1fr; gap:8px; border-top:1px solid #334155; pt:8px;">
+            <div><span style="color:#64748b;">Driver:</span><br/><b>${o.driver_name || 'Unassigned'}</b></div>
+            <div><span style="color:#64748b;">Skip:</span><br/><b>${o.skip_size}yd</b></div>
+          </div>
+          ${o.comments ? `<div style="margin-top:8px; font-size:10px; background:#0f172a; padding:6px; border-radius:4px; color:#cbd5e1;">"${o.comments}"</div>` : ''}
+          <a href="/office?tab=dispatch" style="display:block; text-align:center; background:#3b82f6; color:white; text-decoration:none; padding:6px; border-radius:4px; margin-top:10px; font-size:10px; font-weight:bold;">VIEW IN DISPATCH</a>
+        </div>
+      `, { backgroundColor: '#0f172a', borderColor: '#1e293b' })
       allMarkers.push(marker)
     })
 
     // 2. Delivered Skips (Static Inventory)
     skips.filter(s => s.latitude && s.longitude).forEach(skip => {
+      const daysOnHire = skip.delivery_date ? Math.floor((Date.now() - new Date(skip.delivery_date).getTime()) / 86400000) : 0
       const icon = L.divIcon({
         className: 'bg-transparent',
-        html: '<div style="font-size:20px;">🏗️</div>',
+        html: '<div style="font-size:20px; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">🏗️</div>',
         iconSize: [20, 20],
         iconAnchor: [10, 10]
       })
       const marker = L.marker([skip.latitude, skip.longitude], { icon }).addTo(map)
-      marker.bindPopup(`<div style="font-family:sans-serif;"><b style="color:#10b981;">${skip.skip_size}yd Skip (DELIVERED)</b><br/><b>${skip.customer_name}</b><br/><small>${skip.delivery_address}</small></div>`)
+      marker.bindPopup(`
+        <div style="font-family:sans-serif; min-width:200px; color:#f8fafc;">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px;">
+            <b style="color:#10b981; text-transform:uppercase; font-size:10px;">${skip.skip_size}yd Skip (LIVE)</b>
+            <span style="font-size:9px; background:#064e3b; color:#34d399; padding:2px 6px; border-radius:4px; font-weight:bold;">${daysOnHire} DAYS ON HIRE</span>
+          </div>
+          <b style="font-size:14px; display:block; margin-bottom:4px;">${skip.customer_name}</b>
+          <small style="color:#94a3b8; display:block; line-height:1.4;">📍 ${skip.delivery_address}</small>
+          <div style="margin-top:10px; font-size:11px; display:grid; grid-template-cols: 1fr 1fr; gap:8px; border-top:1px solid #334155; pt:8px;">
+            <div><span style="color:#64748b;">Skip ID:</span><br/><b>${skip.skip_id}</b></div>
+            <div><span style="color:#64748b;">Delivered:</span><br/><b>${skip.delivery_date ? new Date(skip.delivery_date).toLocaleDateString() : 'N/A'}</b></div>
+          </div>
+          ${skip.comments ? `<div style="margin-top:8px; font-size:10px; background:#0f172a; padding:6px; border-radius:4px; color:#cbd5e1;">Note: ${skip.comments}</div>` : ''}
+        </div>
+      `)
       allMarkers.push(marker)
     })
 
@@ -1521,7 +1551,26 @@ function MapTab() {
 
     vehicles.forEach(v => {
       const marker = L.marker([v.latitude, v.longitude], { icon: truckIcon }).addTo(map)
-      marker.bindPopup(`<div style="font-family:sans-serif;"><b style="color:#3b82f6;">${v.reg}</b><br/>Speed: ${v.speed || 0} mph<br/><small>Last seen: ${v.last_updated ? new Date(v.last_updated).toLocaleTimeString() : 'Unknown'}</small></div>`)
+      marker.bindPopup(`
+        <div style="font-family:sans-serif; color:#f8fafc; min-width:150px;">
+          <div style="border-bottom:1px solid #334155; padding-bottom:6px; margin-bottom:6px;">
+            <b style="color:#3b82f6; font-size:14px;">${v.reg}</b>
+          </div>
+          <div style="font-size:12px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+              <span style="color:#64748b;">Speed:</span>
+              <b style="${(v.speed || 0) > 0 ? 'color:#10b981;' : ''}">${v.speed || 0} mph</b>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+              <span style="color:#64748b;">Status:</span>
+              <b>${(v.speed || 0) > 0 ? 'In Transit' : 'Stationary'}</b>
+            </div>
+          </div>
+          <div style="margin-top:8px; font-size:9px; color:#475569; text-align:right;">
+            Last Update: ${v.last_updated ? new Date(v.last_updated).toLocaleTimeString() : 'N/A'}
+          </div>
+        </div>
+      `)
       allMarkers.push(marker)
     })
 
@@ -1544,7 +1593,13 @@ function MapTab() {
           iconAnchor: [10, 10]
         })
         const marker = L.marker([p.latitude, p.longitude], { icon }).addTo(map)
-        marker.bindPopup(`<div style="font-family:sans-serif;"><b style="color:#64748b;">${p.folder} (LEGACY)</b><br/><b>${p.name}</b><br/><small>${p.description}</small></div>`)
+        marker.bindPopup(`
+          <div style="font-family:sans-serif; min-width:180px;">
+            <div style="color:#64748b; font-size:9px; font-weight:black; text-transform:uppercase; margin-bottom:4px;">Legacy: ${p.folder}</div>
+            <b style="font-size:13px; display:block; margin-bottom:4px;">${p.name}</b>
+            <p style="font-size:11px; color:#475569; line-height:1.4; margin:0;">${p.description || 'No legacy description'}</p>
+          </div>
+        `)
         allMarkers.push(marker)
       })
     }
