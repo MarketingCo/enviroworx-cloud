@@ -20,8 +20,11 @@ import { logToDrive } from '@/app/actions/drive'
 export async function getDashboardStats() {
   const today = new Date().toISOString().split('T')[0]
   const weekStart = getWeekStart()
+  const twoDaysAway = new Date(); 
+  twoDaysAway.setDate(twoDaysAway.getDate() + 2);
+  const expiryCutoff = twoDaysAway.toISOString().split('T')[0];
 
-  // Run all queries in parallel (this is the key speed improvement)
+  // Run all queries in parallel
   const [
     { data: completedToday },
     { data: completedWeek },
@@ -32,6 +35,8 @@ export async function getDashboardStats() {
     { data: unpaidInvoices },
     { data: driverHours },
     { data: collections },
+    { data: expiringPermits },
+    { data: revenueData },
   ] = await Promise.all([
     supabase.from('orders').select('id', { count: 'exact', head: true })
       .eq('status', 'Completed').eq('date', today),
@@ -46,7 +51,14 @@ export async function getDashboardStats() {
     supabase.from('v_unpaid_invoices').select('*').limit(100),
     supabase.from('v_driver_hours_today').select('*'),
     supabase.from('v_collections_due').select('*'),
+    supabase.from('permits').select('*').lte('expiry_date', expiryCutoff).neq('status', 'Expired'),
+    supabase.from('cash_log').select('cost_gross, net_weight').gte('logged_at', today + 'T00:00:00')
   ])
+
+  // Calculate estimated profit
+  const totalRev = revenueData?.reduce((sum, r) => sum + (r.cost_gross || 0), 0) ?? 0
+  const totalTonnage = (revenueData?.reduce((sum, r) => sum + (r.net_weight || 0), 0) ?? 0) / 1000
+  const estDisposalCost = totalTonnage * 120 // Assume £120/tonne average
 
   return {
     stats: {
@@ -54,12 +66,14 @@ export async function getDashboardStats() {
       completedWeek: completedWeek?.length ?? 0,
       futureBookings: futureBookings?.length ?? 0,
       tipsToday: tipsToday?.length ?? 0,
+      estProfitToday: totalRev - estDisposalCost
     },
     inventorySummary: inventorySummary ?? [],
     activeTippers: activeTippers ?? [],
     unpaidInvoices: unpaidInvoices ?? [],
     driverHours: driverHours ?? [],
     collections: collections ?? [],
+    expiringPermits: expiringPermits ?? []
   }
 }
 

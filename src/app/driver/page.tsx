@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { getDriverJobs, completeJob, driverAbortJob, clockInOut } from '@/lib/api'
+import { getDriverJobs, completeJob, clockInOut } from '@/lib/api'
+import { abortJobWithNotification } from '@/app/actions/notifications'
 import { DEFAULT_CONFIG } from '@/lib/config'
 import toast, { Toaster } from 'react-hot-toast'
 
@@ -161,9 +162,13 @@ export default function DriverApp() {
     if (!reason) return toast.error('Enter a reason')
     setLoading(true)
     setLoaderText('Aborting...')
-    await driverAbortJob(jobId, reason)
-    setJobs(prev => prev.filter(j => j.id !== jobId))
-    toast.success('Job aborted')
+    const result = await abortJobWithNotification(jobId, reason)
+    if (result.success) {
+      setJobs(prev => prev.filter(j => j.id !== jobId))
+      toast.success('Job aborted & customer notified')
+    } else {
+      toast.error('Failed to abort: ' + result.error)
+    }
     setLoading(false)
   }
 

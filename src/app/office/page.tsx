@@ -103,15 +103,40 @@ function DashboardTab({ data, onRefresh }: { data: DashStats | null; onRefresh: 
   if (!data) return <div className="flex items-center justify-center h-64 text-slate-500 text-sm">Loading dashboard...</div>
 
   const totalUnpaid = data.unpaidInvoices.reduce((s: number, i: any) => s + (i.outstanding || 0), 0)
+  const expiringPermits = (data as any).expiringPermits || []
 
   return (
     <div className="space-y-8">
+      {/* Critical Alerts */}
+      {expiringPermits.length > 0 && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-6 flex items-start gap-6">
+          <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center text-white shrink-0 shadow-lg">
+            <AlertTriangle size={24} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-red-500 font-black uppercase tracking-widest text-xs mb-3">Permit Expiry Warning</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {expiringPermits.map((p: any) => (
+                <div key={p.id} className="bg-slate-900/50 p-3 rounded-lg border border-red-500/10 flex justify-between items-center">
+                  <div>
+                    <p className="text-white font-bold text-sm">{p.location}</p>
+                    <p className="text-[10px] text-red-400 font-black uppercase">Expires: {new Date(p.expiry_date).toLocaleDateString()}</p>
+                  </div>
+                  <Badge label={p.status} color="bg-red-900/40 text-red-400" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard label="Completed Today" value={data.stats.completedToday} icon={<CheckCircle size={24} />} />
         <KpiCard label="Completed This Week" value={data.stats.completedWeek} icon={<TrendingUp size={24} />} />
         <KpiCard label="Future Bookings" value={data.stats.futureBookings} icon={<CalendarPlus size={24} />} color="text-blue-400" />
         <KpiCard label="Tips Today" value={data.stats.tipsToday} icon={<Weight size={24} />} color="text-yellow-400" />
+        <KpiCard label="Est. Profit Today" value={fmt((data.stats as any).estProfitToday || 0)} icon={<DollarSign size={24} />} color="text-emerald-500" />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -771,8 +796,12 @@ function BookingsTab() {
   }
 
   function selectSuggestion(c: any) {
+    const isOverLimit = (c.account_balance || 0) > (DEFAULT_CONFIG.creditLimit || 500)
     setForm(f => ({ ...f, customerName: c.name, phone: c.phone || '', address: c.billing_address || '' }))
     setSuggestions([])
+    if (isOverLimit) {
+      toast.error(`CREDIT WARNING: ${c.name} has a balance of ${fmt(c.account_balance)}`, { duration: 6000, icon: '⚠️' })
+    }
   }
 
   async function handleBook() {
@@ -820,9 +849,16 @@ function BookingsTab() {
             <div className="absolute z-10 w-full bg-slate-800 border border-white/10 rounded-lg mt-1 shadow-xl">
               {suggestions.map((c: any) => (
                 <button key={c.id} onClick={() => selectSuggestion(c)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-slate-700 text-sm text-white flex justify-between">
-                  <span>{c.name}</span>
-                  <span className="text-slate-500">{c.phone}</span>
+                  className="w-full text-left px-4 py-2.5 hover:bg-slate-700 text-sm text-white flex justify-between items-center">
+                  <div>
+                    <span className="font-bold">{c.name}</span>
+                    <p className="text-[10px] text-slate-500">{c.billing_address || 'No address'}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-xs font-black ${c.account_balance > (DEFAULT_CONFIG.creditLimit || 500) ? 'text-red-400' : 'text-slate-400'}`}>
+                      {fmt(c.account_balance || 0)}
+                    </span>
+                  </div>
                 </button>
               ))}
             </div>
