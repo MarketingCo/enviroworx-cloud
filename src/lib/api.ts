@@ -958,6 +958,17 @@ export async function getLorries() {
   return data ?? []
 }
 
+export async function getDriversList() {
+  const { data } = await supabase.from('drivers').select('*').order('name')
+  return data ?? []
+}
+
+export async function updateDriverPin(id: string, pin: string) {
+  const { error } = await supabase.from('drivers').update({ pin }).eq('id', id)
+  if (error) throw error
+  return { success: true }
+}
+
 export async function updateConfig(key: string, value: any) {
   const { error } = await supabase.from('config').upsert({ key, value, updated_at: new Date().toISOString() })
   if (error) throw error

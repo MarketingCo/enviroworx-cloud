@@ -18,6 +18,8 @@ import {
   generateReport,
   getSkipUtilization,
   getLorries,
+  getDriversList,
+  updateDriverPin,
   updateConfig,
   getCustomPricingList,
   addCustomPrice,
@@ -1444,21 +1446,35 @@ function InventoryTab() {
 
 function FleetTab() {
   const [lorries, setLorries] = useState<any[]>([])
+  const [drivers, setDrivers] = useState<any[]>([])
   const [issues, setIssues] = useState<any[]>([])
   const [showLogIssue, setShowLogIssue] = useState(false)
   const [issueForm, setIssueForm] = useState({ lorry_reg: '', issue_type: 'Mechanical', description: '', reported_by: '' })
   const [savingIssue, setSavingIssue] = useState(false)
 
   async function load() {
-    const [lorryData, { data: issueData }] = await Promise.all([
+    const [lorryData, driverData, { data: issueData }] = await Promise.all([
       getLorries(),
+      getDriversList(),
       supabase.from('fleet_logs').select('*').eq('status', 'Open').order('created_at', { ascending: false }),
     ])
     setLorries(lorryData)
+    setDrivers(driverData)
     setIssues(issueData ?? [])
   }
 
   useEffect(() => { load() }, [])
+
+  async function handlePinChange(id: string, newPin: string) {
+    if (newPin.length !== 4) return
+    try {
+      await updateDriverPin(id, newPin)
+      toast.success('PIN Updated')
+      load()
+    } catch (e: any) {
+      toast.error('Failed: ' + e.message)
+    }
+  }
 
   function motDays(dateStr: string | null): number | null {
     if (!dateStr) return null
@@ -1526,7 +1542,7 @@ function FleetTab() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-3 gap-6">
         {/* Lorry Fleet */}
         <div className="bg-slate-900 border border-white/5 rounded-xl p-5">
           <SectionHeader title={`Fleet (${lorries.length} vehicles)`} />
@@ -1555,6 +1571,37 @@ function FleetTab() {
                         : 'Unknown'}
                     </span>
                   </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Driver Management */}
+        <div className="bg-slate-900 border border-white/5 rounded-xl p-5 shadow-xl">
+          <SectionHeader title={`Drivers (${drivers.length})`} />
+          <div className="space-y-3">
+            {drivers.length === 0 && <p className="text-slate-500 text-sm">No drivers registered</p>}
+            {drivers.map((d: any) => (
+              <div key={d.id} className="border border-white/5 rounded-lg p-4 bg-slate-950/30 flex items-center justify-between group">
+                <div>
+                  <p className="font-black text-white text-sm">{d.name}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`w-1.5 h-1.5 rounded-full ${d.status === 'Available' ? 'bg-emerald-500' : 'bg-slate-600'}`}></span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">{d.status || 'Offline'}</span>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Access PIN</label>
+                  <input
+                    type="password"
+                    defaultValue={d.pin}
+                    maxLength={4}
+                    onBlur={(e) => {
+                      if (e.target.value !== d.pin) handlePinChange(d.id, e.target.value)
+                    }}
+                    className="bg-slate-900 border border-white/10 text-primary font-black text-center tracking-[0.5em] w-20 py-1 rounded text-sm focus:border-primary outline-none transition-all"
+                  />
                 </div>
               </div>
             ))}
