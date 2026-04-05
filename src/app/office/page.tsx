@@ -19,6 +19,9 @@ import {
   getSkipUtilization,
   getLorries,
   updateConfig,
+  getCustomPricingList,
+  addCustomPrice,
+  deleteCustomPrice,
 } from '@/lib/api'
 import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
 import toast, { Toaster } from 'react-hot-toast'
@@ -44,6 +47,7 @@ import {
   Search,
   DollarSign,
   Settings,
+  Trash2,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1963,19 +1967,31 @@ function MapTab() {
 
 function SettingsTab() {
   const [config, setConfig] = useState<any>(null)
+  const [customRates, setCustomRates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  
+  const [newRate, setNewRate] = useState({
+    customer_name: '',
+    skip_size: '8',
+    waste_type: '',
+    net_price: ''
+  })
 
-  useEffect(() => {
-    async function load() {
-      const { data } = await supabase.from('config').select('*')
-      const cfg: any = {}
-      data?.forEach(row => { cfg[row.key] = row.value })
-      setConfig(cfg)
-      setLoading(false)
-    }
-    load()
-  }, [])
+  async function load() {
+    setLoading(true)
+    const [{ data }, rates] = await Promise.all([
+      supabase.from('config').select('*'),
+      getCustomPricingList()
+    ])
+    const cfg: any = {}
+    data?.forEach(row => { cfg[row.key] = row.value })
+    setConfig(cfg)
+    setCustomRates(rates)
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
 
   async function handleSave(key: string, value: any) {
     setSaving(true)
@@ -1988,130 +2004,96 @@ function SettingsTab() {
     setSaving(false)
   }
 
+  async function handleAddRate() {
+    if (!newRate.customer_name || !newRate.net_price) return toast.error('Customer and Price required')
+    try {
+      await addCustomPrice({
+        customer_name: newRate.customer_name,
+        skip_size: newRate.skip_size || undefined,
+        waste_type: newRate.waste_type || undefined,
+        net_price: Number(newRate.net_price)
+      })
+      toast.success('Special rate added')
+      setNewRate({ customer_name: '', skip_size: '8', waste_type: '', net_price: '' })
+      load()
+    } catch (e: any) {
+      toast.error(e.message)
+    }
+  }
+
+  async function handleDeleteRate(id: string) {
+    if (!confirm('Remove this special rate?')) return
+    await deleteCustomPrice(id)
+    toast.success('Rate removed')
+    load()
+  }
+
   if (loading) return <div className="p-10 text-center text-slate-500 font-black uppercase animate-pulse">Loading system settings...</div>
 
   return (
-    <div className="space-y-10 max-w-4xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <div className="grid md:grid-cols-2 gap-8">
+    <div className="space-y-10 max-w-6xl animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
         {/* Skip Prices */}
-        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl">
-          <SectionHeader title="Skip Hire Prices (Net)" />
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mt-4">
-            {Object.entries(config.prices_skip || {}).map(([size, price]: [string, any]) => (
-              <div key={size} className="flex flex-col gap-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">{size}yd Skip</label>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-600 font-bold text-xs">£</span>
-                  <input
-                    type="number"
-                    defaultValue={price}
-                    onBlur={e => {
-                      const next = { ...config.prices_skip, [size]: Number(e.target.value) }
-                      handleSave('prices_skip', next)
-                    }}
-                    className="bg-slate-800 border border-white/10 text-white px-2 py-1 rounded text-sm w-full focus:border-primary outline-none"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Waste Rates */}
-        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl">
-          <SectionHeader title="Waste Tip Rates (per Tonne)" />
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mt-4">
-            {Object.entries(config.prices_waste || {}).map(([type, price]: [string, any]) => (
-              <div key={type} className="flex flex-col gap-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">{type}</label>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-600 font-bold text-xs">£</span>
-                  <input
-                    type="number"
-                    defaultValue={price}
-                    onBlur={e => {
-                      const next = { ...config.prices_waste, [type]: Number(e.target.value) }
-                      handleSave('prices_waste', next)
-                    }}
-                    className="bg-slate-800 border border-white/10 text-white px-2 py-1 rounded text-sm w-full focus:border-primary outline-none"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Disposal Costs */}
-        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl">
-          <SectionHeader title="Profitability Calc (Disposal Costs)" />
-          <p className="text-[9px] text-slate-500 mb-4 uppercase font-bold italic tracking-tighter italic">Your actual costs per tonne at the tip.</p>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-            {Object.entries(config.disposal_costs || {}).map(([type, cost]: [string, any]) => (
-              <div key={type} className="flex flex-col gap-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">{type}</label>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-600 font-bold text-xs">£</span>
-                  <input
-                    type="number"
-                    defaultValue={cost}
-                    onBlur={e => {
-                      const next = { ...config.disposal_costs, [type]: Number(e.target.value) }
-                      handleSave('disposal_costs', next)
-                    }}
-                    className="bg-slate-800 border border-white/10 text-white px-2 py-1 rounded text-sm w-full focus:border-primary outline-none"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Operational Limits */}
-        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 space-y-6 shadow-xl">
-          <div>
-            <SectionHeader title="Neural Settings" />
-            <div className="grid grid-cols-2 gap-4 mt-4">
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">Default Credit Limit</label>
-                <input type="number" defaultValue={config.credit_limit} onBlur={e => handleSave('credit_limit', Number(e.target.value))}
-                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">Max Hire (Days)</label>
-                <input type="number" defaultValue={config.demurrage_days} onBlur={e => handleSave('demurrage_days', Number(e.target.value))}
-                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
-              </div>
-            </div>
-          </div>
-          <div>
-            <SectionHeader title="Financial Constants" />
-            <div className="grid grid-cols-2 gap-4 mt-4">
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">VAT Rate (0.20)</label>
-                <input type="number" defaultValue={config.vat_rate} onBlur={e => handleSave('vat_rate', Number(e.target.value))}
-                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
-              </div>
-            </div>
-          </div>
+...
         </div>
       </div>
 
-      {/* Company Info */}
-      <div className="bg-slate-900 border border-white/5 rounded-2xl p-8 shadow-2xl">
-        <SectionHeader title="Identity & Branding" />
-        <p className="text-[10px] text-slate-500 mb-6 uppercase tracking-widest">Global metadata for generated documentation.</p>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-          <div className="space-y-5 col-span-2">
+      <div className="grid lg:grid-cols-2 gap-8">
+        {/* Special Customer Rates */}
+        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl flex flex-col h-[500px]">
+          <SectionHeader title="Special Customer Rates (Overrides)" />
+          <div className="bg-slate-950/50 p-4 rounded-xl border border-white/5 mb-4">
+            <p className="text-[10px] font-black text-primary uppercase mb-3 italic">Add New Override</p>
+            <div className="grid grid-cols-2 gap-3">
+              <input type="text" placeholder="Customer Name" value={newRate.customer_name} onChange={e => setNewRate({ ...newRate, customer_name: e.target.value })}
+                className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
+              <input type="number" placeholder="Net Price (£)" value={newRate.net_price} onChange={e => setNewRate({ ...newRate, net_price: e.target.value })}
+                className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
+              <select value={newRate.skip_size} onChange={e => setNewRate({ ...newRate, skip_size: e.target.value })}
+                className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-sm outline-none">
+                <option value="">-- No Skip Size --</option>
+                {SKIP_SIZES.map(s => <option key={s} value={s}>{s}yd Skip</option>)}
+              </select>
+              <button onClick={handleAddRate} className="bg-primary text-slate-900 font-black text-xs uppercase tracking-widest rounded hover:brightness-90 transition">
+                Create Override
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+            {customRates.map(r => (
+              <div key={r.id} className="bg-slate-800/50 border border-white/5 p-3 rounded-lg flex justify-between items-center group">
+                <div>
+                  <p className="text-white font-bold text-sm">{r.customer_name}</p>
+                  <p className="text-[10px] text-slate-500 uppercase font-black">
+                    {r.skip_size ? `${r.skip_size}yd Skip` : r.waste_type || 'General'} Override
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-primary font-black text-sm">{fmt(r.net_price)}</span>
+                  <button onClick={() => handleDeleteRate(r.id)} className="text-slate-600 hover:text-red-400 transition-colors">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            {customRates.length === 0 && <p className="text-center text-slate-600 text-sm mt-10 italic">No custom rates configured</p>}
+          </div>
+        </div>
+
+        {/* Identity & Branding */}
+        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-2xl flex flex-col h-[500px]">
+          <SectionHeader title="Branding Protocol" />
+          <div className="space-y-4 flex-1">
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-black text-slate-500 uppercase">Registered Business Name</label>
+              <label className="text-[10px] font-black text-slate-500 uppercase">Registered Name</label>
               <input type="text" defaultValue={config.company_info?.name} onBlur={e => handleSave('company_info', { ...config.company_info, name: e.target.value })}
-                className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm w-full focus:border-primary outline-none" />
+                className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm w-full outline-none" />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-black text-slate-500 uppercase">Trading Address</label>
+              <label className="text-[10px] font-black text-slate-500 uppercase">Registered Address</label>
               <textarea defaultValue={config.company_info?.address} onBlur={e => handleSave('company_info', { ...config.company_info, address: e.target.value })}
-                className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm w-full h-20 focus:border-primary outline-none" />
+                className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm w-full h-24 focus:border-primary outline-none" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1">
@@ -2125,24 +2107,17 @@ function SettingsTab() {
                   className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
               </div>
             </div>
-          </div>
-
-          <div className="space-y-5 bg-slate-950/50 p-6 rounded-2xl border border-white/5 shadow-inner">
-            <p className="text-[10px] font-black text-primary uppercase mb-2 italic">Banking Protocol</p>
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-black text-slate-600 uppercase">Bank Provider</label>
-              <input type="text" defaultValue={config.company_info?.bank_name} onBlur={e => handleSave('company_info', { ...config.company_info, bank_name: e.target.value })}
-                className="bg-transparent border-b border-white/10 text-white py-1 rounded-none text-sm focus:border-primary outline-none" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-black text-slate-600 uppercase">Sort Code</label>
-              <input type="text" defaultValue={config.company_info?.sort_code} onBlur={e => handleSave('company_info', { ...config.company_info, sort_code: e.target.value })}
-                className="bg-transparent border-b border-white/10 text-white py-1 rounded-none text-sm focus:border-primary outline-none" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-black text-slate-600 uppercase">Account Number</label>
-              <input type="text" defaultValue={config.company_info?.account_number} onBlur={e => handleSave('company_info', { ...config.company_info, account_number: e.target.value })}
-                className="bg-transparent border-b border-white/10 text-white py-1 rounded-none text-sm focus:border-primary outline-none" />
+            
+            <div className="bg-slate-950/50 p-4 rounded-xl border border-white/5 mt-4">
+              <p className="text-[10px] font-black text-primary uppercase mb-3 italic">Banking details</p>
+              <div className="grid grid-cols-3 gap-3">
+                <input type="text" placeholder="Bank" defaultValue={config.company_info?.bank_name} onBlur={e => handleSave('company_info', { ...config.company_info, bank_name: e.target.value })}
+                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-[10px] outline-none" />
+                <input type="text" placeholder="Sort Code" defaultValue={config.company_info?.sort_code} onBlur={e => handleSave('company_info', { ...config.company_info, sort_code: e.target.value })}
+                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-[10px] outline-none" />
+                <input type="text" placeholder="Account #" defaultValue={config.company_info?.account_number} onBlur={e => handleSave('company_info', { ...config.company_info, account_number: e.target.value })}
+                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-[10px] outline-none" />
+              </div>
             </div>
           </div>
         </div>
