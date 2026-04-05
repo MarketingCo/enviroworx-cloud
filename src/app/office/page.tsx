@@ -2034,7 +2034,76 @@ function SettingsTab() {
     <div className="space-y-10 max-w-6xl animate-in fade-in slide-in-from-bottom-2 duration-500">
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
         {/* Skip Prices */}
-...
+        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl">
+          <SectionHeader title="Skip Hire Prices (Net)" />
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mt-4">
+            {Object.entries(config.prices_skip || {}).map(([size, price]: [string, any]) => (
+              <div key={size} className="flex flex-col gap-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase">{size}yd Skip</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 font-bold text-xs">£</span>
+                  <input
+                    type="number"
+                    defaultValue={price}
+                    onBlur={e => {
+                      const next = { ...config.prices_skip, [size]: Number(e.target.value) }
+                      handleSave('prices_skip', next)
+                    }}
+                    className="bg-slate-800 border border-white/10 text-white px-2 py-1 rounded text-sm w-full focus:border-primary outline-none"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Waste Tip Rates */}
+        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl">
+          <SectionHeader title="Waste Tip Rates (per Tonne)" />
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mt-4">
+            {Object.entries(config.prices_waste || {}).map(([type, price]: [string, any]) => (
+              <div key={type} className="flex flex-col gap-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase">{type}</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 font-bold text-xs">£</span>
+                  <input
+                    type="number"
+                    defaultValue={price}
+                    onBlur={e => {
+                      const next = { ...config.prices_waste, [type]: Number(e.target.value) }
+                      handleSave('prices_waste', next)
+                    }}
+                    className="bg-slate-800 border border-white/10 text-white px-2 py-1 rounded text-sm w-full focus:border-primary outline-none"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Profitability Calc */}
+        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl">
+          <SectionHeader title="Profitability Calc (Disposal Costs)" />
+          <p className="text-[9px] text-slate-500 mb-4 uppercase font-bold italic tracking-tighter">Your actual costs per tonne at the tip.</p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+            {Object.entries(config.disposal_costs || {}).map(([type, cost]: [string, any]) => (
+              <div key={type} className="flex flex-col gap-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase">{type}</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 font-bold text-xs">£</span>
+                  <input
+                    type="number"
+                    defaultValue={cost}
+                    onBlur={e => {
+                      const next = { ...config.disposal_costs, [type]: Number(e.target.value) }
+                      handleSave('disposal_costs', next)
+                    }}
+                    className="bg-slate-800 border border-white/10 text-white px-2 py-1 rounded text-sm w-full focus:border-primary outline-none"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
