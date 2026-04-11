@@ -25,7 +25,9 @@ export async function createDraftInvoice(order: {
   amount: number
 }) {
   const config = await getQBConfig() as any
-  const { accessToken, realmId, clientId, clientSecret, refreshToken } = config
+  const clientId = process.env.QUICKBOOKS_CLIENT_ID || config.clientId
+  const clientSecret = process.env.QUICKBOOKS_CLIENT_SECRET || config.clientSecret
+  const { accessToken, realmId, refreshToken } = config
 
   if (!accessToken || !realmId) {
     throw new Error('QuickBooks not connected. Please connect in settings.')
@@ -37,7 +39,7 @@ export async function createDraftInvoice(order: {
     accessToken,
     false,
     realmId,
-    true, // Sandbox - set to false for production
+    process.env.QUICKBOOKS_ENVIRONMENT === 'sandbox', // Use env var to toggle sandbox
     true,
     null,
     '2.0',
