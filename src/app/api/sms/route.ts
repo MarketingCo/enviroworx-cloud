@@ -3,8 +3,11 @@
  * POST /api/sms { to: "+447...", body: "message" }
  */
 import { NextResponse } from 'next/server'
+import { isAuthorized, unauthorized } from '@/lib/api-auth'
 
 export async function POST(request: Request) {
+  if (!isAuthorized(request)) return unauthorized()
+
   const { to, body } = await request.json()
 
   const sid = process.env.TWILIO_ACCOUNT_SID
@@ -28,8 +31,8 @@ export async function POST(request: Request) {
       }
     )
     const data = await res.json()
-    return NextResponse.json({ success: res.status === 201, sid: data.sid })
-  } catch (e: any) {
-    return NextResponse.json({ success: false, message: e.message })
+    return NextResponse.json({ success: true, sid: data.sid })
+  } catch (err: any) {
+    return NextResponse.json({ success: false, message: err.message }, { status: 500 })
   }
 }

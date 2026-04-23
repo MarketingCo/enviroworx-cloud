@@ -7,8 +7,11 @@ import { NextResponse } from 'next/server'
 import { archiveOldOrders, getSkipUtilization } from '@/lib/api'
 import { supabaseAdmin } from '@/lib/supabase'
 import { DEFAULT_CONFIG } from '@/lib/config'
+import { isAuthorized, unauthorized } from '@/lib/api-auth'
 
 export async function POST(request: Request) {
+  if (!isAuthorized(request)) return unauthorized()
+
   const body = await request.json()
 
   switch (body.action) {
@@ -87,7 +90,6 @@ export async function POST(request: Request) {
     }
 
     case 'health': {
-      // System health check — useful for monitoring
       const checks = await Promise.allSettled([
         supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }),
         supabaseAdmin.from('inventory').select('id', { count: 'exact', head: true }),

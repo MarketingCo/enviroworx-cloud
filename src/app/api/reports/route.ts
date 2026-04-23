@@ -6,8 +6,11 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { DEFAULT_CONFIG } from '@/lib/config'
+import { isAuthorized, unauthorized } from '@/lib/api-auth'
 
 export async function GET(request: Request) {
+  if (!isAuthorized(request)) return unauthorized()
+
   const { searchParams } = new URL(request.url)
   const type = searchParams.get('type')
   const start = searchParams.get('start')

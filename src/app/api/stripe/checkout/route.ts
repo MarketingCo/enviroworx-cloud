@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { createClient } from '@supabase/supabase-js'
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' })
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { supabaseAdmin } from '@/lib/supabase'
 
 /**
  * POST /api/stripe/checkout
@@ -15,6 +8,13 @@ const supabase = createClient(
  * Body: { customerId, orderIds?, amount, description }
  */
 export async function POST(req: NextRequest) {
+  const stripeKey = process.env.STRIPE_SECRET_KEY
+  if (!stripeKey) {
+    return NextResponse.json({ error: 'Stripe not configured' }, { status: 500 })
+  }
+
+  const stripe = new Stripe(stripeKey, { apiVersion: '2024-06-20' })
+
   try {
     const { customerId, orderIds, amount, description, customerEmail, customerName } = await req.json()
 
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const origin = req.headers.get('origin') || 'https://enviroworx.co.uk'
+    const origin = req.headers.get('origin') || 'https://enviroworx.vercel.app'
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
