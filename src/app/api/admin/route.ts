@@ -3,6 +3,8 @@
  * POST /api/admin
  * body: { action: 'archive' | 'utilization' | 'demurrage' | 'health', ... }
  */
+export const dynamic = 'force-dynamic'
+
 import { NextResponse } from 'next/server'
 import { archiveOldOrders, getSkipUtilization } from '@/lib/api'
 import { supabaseAdmin } from '@/lib/supabase'

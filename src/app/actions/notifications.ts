@@ -1,7 +1,7 @@
 'use server'
 
 import { sendSms } from '@/lib/sms'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin, safeActivityLog } from '@/lib/supabase'
 
 export async function abortJobWithNotification(orderId: string, reason: string) {
   try {
@@ -25,8 +25,7 @@ export async function abortJobWithNotification(orderId: string, reason: string) 
     }
 
     // 3. Log to activity_log
-    // @ts-ignore
-    await supabaseAdmin.from('activity_log').insert({
+    await safeActivityLog({
       type: 'SYS',
       message: `Job ${orderId} aborted by driver. SMS sent to customer.`,
       status: 'Completed'

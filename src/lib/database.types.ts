@@ -56,7 +56,7 @@ export type Database = {
       }
       driver_hours: {
         Row: { break_minutes: number | null; clock_in: string | null; clock_out: string | null; created_at: string | null; date: string | null; driver_id: string | null; driver_name: string | null; hours_worked: number | null; id: string; vehicle_id: string | null; vehicle_reg: string | null }
-        Insert: { break_minutes?: string | null; clock_in?: string | null; clock_out?: string | null; created_at?: string | null; date?: string | null; driver_id?: string | null; driver_name?: string | null; hours_worked?: number | null; id?: string; vehicle_id?: string | null; vehicle_reg?: string | null }
+        Insert: { break_minutes?: number | null; clock_in?: string | null; clock_out?: string | null; created_at?: string | null; date?: string | null; driver_id?: string | null; driver_name?: string | null; hours_worked?: number | null; id?: string; vehicle_id?: string | null; vehicle_reg?: string | null }
         Update: { break_minutes?: number | null; clock_in?: string | null; clock_out?: string | null; created_at?: string | null; date?: string | null; driver_id?: string | null; driver_name?: string | null; hours_worked?: number | null; id?: string; vehicle_id?: string | null; vehicle_reg?: string | null }
         Relationships: []
       }
@@ -145,15 +145,27 @@ export type Database = {
         Relationships: []
       }
       vehicles: {
-        Row: { active: boolean | null; created_at: string | null; id: string; insurance_expiry: string | null; last_6weekly_date: string | null; last_service_date: string | null; last_service_mileage: number | null; mot_due: string | null; name: string | null; notes: string | null; operator_licence: string | null; reg: string; tare_weight: number | null; tax_due: string | null; type: string | null; verizon_vehicle_number: string | null }
-        Insert: { active?: boolean | null; created_at?: string | null; id?: string; insurance_expiry?: string | null; last_6weekly_date?: string | null; last_service_date?: string | null; last_service_mileage?: number | null; mot_due?: string | null; name?: string | null; notes?: string | null; operator_licence?: string | null; reg: string; tare_weight?: number | null; tax_due?: string | null; type?: string | null; verizon_vehicle_number?: string | null }
-        Update: { active?: boolean | null; created_at?: string | null; id?: string; insurance_expiry?: string | null; last_6weekly_date?: string | null; last_service_date?: string | null; last_service_mileage?: number | null; mot_due?: string | null; name?: string | null; notes?: string | null; operator_licence?: string | null; reg?: string; tare_weight?: number | null; tax_due?: string | null; type?: string | null; verizon_vehicle_number?: string | null }
+        Row: { active: boolean | null; created_at: string | null; heading: number | null; id: string; insurance_expiry: string | null; last_6weekly_date: string | null; last_service_date: string | null; last_service_mileage: number | null; last_updated: string | null; latitude: number | null; longitude: number | null; mot_due: string | null; name: string | null; notes: string | null; operator_licence: string | null; reg: string; speed: number | null; tare_weight: number | null; tax_due: string | null; type: string | null; verizon_vehicle_number: string | null }
+        Insert: { active?: boolean | null; created_at?: string | null; heading?: number | null; id?: string; insurance_expiry?: string | null; last_6weekly_date?: string | null; last_service_date?: string | null; last_service_mileage?: number | null; last_updated?: string | null; latitude?: number | null; longitude?: number | null; mot_due?: string | null; name?: string | null; notes?: string | null; operator_licence?: string | null; reg: string; speed?: number | null; tare_weight?: number | null; tax_due?: string | null; type?: string | null; verizon_vehicle_number?: string | null }
+        Update: { active?: boolean | null; created_at?: string | null; heading?: number | null; id?: string; insurance_expiry?: string | null; last_6weekly_date?: string | null; last_service_date?: string | null; last_service_mileage?: number | null; last_updated?: string | null; latitude?: number | null; longitude?: number | null; mot_due?: string | null; name?: string | null; notes?: string | null; operator_licence?: string | null; reg?: string; speed?: number | null; tare_weight?: number | null; tax_due?: string | null; type?: string | null; verizon_vehicle_number?: string | null }
         Relationships: []
       }
       walkaround_checks: {
         Row: { checks: Json | null; date: string | null; driver_id: string | null; driver_name: string | null; has_defects: boolean | null; id: string; notes: string | null; submitted_at: string | null; vehicle_id: string | null; vehicle_reg: string | null }
         Insert: { checks?: Json | null; date?: string | null; driver_id?: string | null; driver_name?: string | null; has_defects?: boolean | null; id?: string; notes?: string | null; submitted_at?: string | null; vehicle_id?: string | null; vehicle_reg?: string | null }
         Update: { checks?: Json | null; date?: string | null; driver_id?: string | null; driver_name?: string | null; has_defects?: boolean | null; id?: string; notes?: string | null; submitted_at?: string | null; vehicle_id?: string | null; vehicle_reg?: string | null }
+        Relationships: []
+      }
+      activity_log: {
+        Row: { id: string; created_at: string | null; type: string | null; message: string | null; status: string | null }
+        Insert: { id?: string; created_at?: string | null; type?: string | null; message?: string | null; status?: string | null }
+        Update: { id?: string; created_at?: string | null; type?: string | null; message?: string | null; status?: string | null }
+        Relationships: []
+      }
+      vehicle_telemetry: {
+        Row: { id: string; created_at: string | null; vehicle_reg: string | null; latitude: number | null; longitude: number | null; speed: number | null; heading: number | null }
+        Insert: { id?: string; created_at?: string | null; vehicle_reg?: string | null; latitude?: number | null; longitude?: number | null; speed?: number | null; heading?: number | null }
+        Update: { id?: string; created_at?: string | null; vehicle_reg?: string | null; latitude?: number | null; longitude?: number | null; speed?: number | null; heading?: number | null }
         Relationships: []
       }
       weighbridge_readings: {

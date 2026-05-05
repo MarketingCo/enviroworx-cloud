@@ -1,5 +1,7 @@
+export const dynamic = 'force-dynamic'
+
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin, safeActivityLog } from '@/lib/supabase'
 import { sendSms } from '@/lib/sms'
 
 export async function GET() {
@@ -30,8 +32,7 @@ export async function GET() {
     }
 
     // Log the activity
-    // @ts-ignore
-    await supabaseAdmin.from('activity_log').insert({
+    await safeActivityLog({
       type: 'SYS',
       message: `Sent ${sent} collection reminders for ${tomorrowStr}`,
       status: 'Completed'

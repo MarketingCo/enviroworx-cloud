@@ -3,6 +3,8 @@
  * Returns CSV data instead of creating Google Sheets
  * GET /api/reports?type=SEPA&start=2024-01-01&end=2024-12-31
  */
+export const dynamic = 'force-dynamic'
+
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { DEFAULT_CONFIG } from '@/lib/config'

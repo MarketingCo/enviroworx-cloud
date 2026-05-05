@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin, safeActivityLog } from '@/lib/supabase'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' })
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 export const dynamic = 'force-dynamic'
 
@@ -34,12 +29,12 @@ export async function POST(req: NextRequest) {
     const orderIds: string[] = meta.order_ids ? JSON.parse(meta.order_ids) : []
 
     if (orderIds.length > 0) {
-      await supabase.from('orders')
+      await supabaseAdmin.from('orders')
         .update({ paid: true })
         .in('id', orderIds)
     } else if (customerName) {
       // Mark all unpaid completed invoice orders for this customer
-      await supabase.from('orders')
+      await supabaseAdmin.from('orders')
         .update({ paid: true })
         .ilike('customer_name', customerName)
         .eq('status', 'Completed')
@@ -48,7 +43,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Log the payment
-    await supabase.from('activity_log').insert({
+    await safeActivityLog({
       type: 'SYS',
       message: `Online payment received: £${amountPaid.toFixed(2)} from ${customerName}`,
       status: 'Completed',

@@ -6,6 +6,7 @@ const config: Config = {
     extend: {
       colors: {
         primary: { DEFAULT: '#059669', dark: '#047857', light: '#d1fae5' },
+        'brand-green': '#059669',
         warn: '#f59e0b',
         danger: '#ef4444',
       },

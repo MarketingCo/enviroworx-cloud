@@ -580,17 +580,39 @@ function WeighbridgeTab() {
     toast.success(`Loaded ${t.reg || 'Truck'}. Weight captured from scale.`)
   }
   async function handleLogTipper() {
+    if (!form.lorryReg || !form.customerName) {
+      toast.error('Registration and Customer Name are required', { icon: '⚠️' })
+      return
+    }
     const weightToUse = form.grossWeight || String(liveWeight || 0)
     const result = await logActiveTipper({
       lorryReg: form.lorryReg, customerName: form.customerName,
       wasteType: form.wasteType, grossWeight: Number(weightToUse),
       address: form.address || 'Yard', skipSize: form.skipSize, skipId: form.skipId,
     })
-    result.success ? toast.success(result.message) : toast.error(result.message)
-    if (result.success) set('lorryReg', '')
+    
+    if (result.success) {
+      toast.success(result.message, { icon: '📥', duration: 4000 })
+      // CRITICAL FIX: Reset the ENTIRE form so the next truck is a clean slate
+      setForm({
+        lorryReg: '', customerName: '', wasteType: 'Mix Con', grossWeight: '',
+        tareWeight: '', skipSize: 'Tipper', skipId: '', address: 'Yard', direction: 'On-site',
+        paymentMethod: 'Invoice', amountPaid: '', wbNotes: '', tipperRowIndex: ''
+      })
+      setManualOverride('')
+      setSuggestions([])
+    } else {
+      toast.error(result.message)
+    }
   }
 
+  const isFormValid = form.lorryReg && form.customerName;
+
   async function handleProcessWeight() {
+    if (!form.lorryReg || !form.customerName || !form.grossWeight || !form.tareWeight) {
+      toast.error('Missing required weights or details')
+      return
+    }
     const result = await processWeightLog({
       lorryReg: form.lorryReg, customerName: form.customerName,
       wasteType: form.wasteType, grossWeight: Number(form.grossWeight),
@@ -605,20 +627,20 @@ function WeighbridgeTab() {
     if (result.success) {
       toast.success((t) => (
         <div className="flex flex-col gap-2">
-          <span>{result.message}</span>
+          <span className="font-bold">✅ {result.message}</span>
           <button 
             onClick={() => {
               window.open(`/api/documents?type=WTN&ticketNumber=${(result as any).ticketNumber}`, '_blank')
               toast.dismiss(t.id)
             }}
-            className="bg-white text-slate-900 px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-widest shadow-xl"
+            className="bg-emerald-500 text-white px-4 py-2 rounded text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all"
           >
-            🖨️ Print Ticket
+            🖨️ Print Weight Ticket
           </button>
         </div>
-      ), { duration: 10000 })
+      ), { duration: 15000 })
 
-      setForm(f => ({ ...f, lorryReg: '', customerName: '', grossWeight: '', tareWeight: '', skipId: '', amountPaid: '', wbNotes: '', tipperRowIndex: '' }))
+      setForm({ lorryReg: '', customerName: '', grossWeight: '', tareWeight: '', skipId: '', amountPaid: '', wbNotes: '', tipperRowIndex: '', wasteType: 'Mix Con', skipSize: 'Tipper', address: 'Yard', direction: 'On-site', paymentMethod: 'Invoice' })
       setManualOverride('')
       setTareMsg('')
       setLogMode('tipper')
@@ -682,45 +704,75 @@ function WeighbridgeTab() {
 
       {/* Log Form */}
       <div className="lg:col-span-3 bg-slate-900 border border-white/5 rounded-xl p-5 shadow-2xl">
-        <div className="flex gap-2 mb-6">
-          {(['tipper', 'full'] as const).map(m => (
-            <button key={m} onClick={() => setLogMode(m)}
-              className={`px-4 py-1.5 rounded text-xs font-black uppercase tracking-widest transition-all ${logMode === m ? 'bg-primary text-slate-900 shadow-lg shadow-primary/20' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
-              {m === 'tipper' ? '1. Log Truck IN' : '2. Process Final Weight'}
-            </button>
-          ))}
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex gap-2">
+            {(['tipper', 'full'] as const).map(m => (
+              <button key={m} onClick={() => setLogMode(m)}
+                className={`px-4 py-1.5 rounded text-xs font-black uppercase tracking-widest transition-all ${logMode === m ? 'bg-primary text-slate-900 shadow-lg shadow-primary/20' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+                {m === 'tipper' ? '📥 Step 1: Log IN' : '📤 Step 2: Final / OUT'}
+              </button>
+            ))}
+          </div>
+          <button 
+            onClick={() => {
+              setForm({ lorryReg: '', customerName: '', wasteType: 'Mix Con', grossWeight: '', tareWeight: '', skipSize: 'Tipper', skipId: '', address: 'Yard', direction: 'On-site', paymentMethod: 'Invoice', amountPaid: '', wbNotes: '', tipperRowIndex: '' })
+              setManualOverride('')
+              setSuggestions([])
+            }}
+            className="text-[10px] font-black text-slate-500 hover:text-red-400 uppercase tracking-widest transition-colors"
+          >
+            Reset Form
+          </button>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Lorry (Own Fleet)</label>
-            <select value={form.lorryReg} onChange={e => handleLorryChange(e.target.value)}
-              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm">
-              <option value="">-- Manual / 3rd Party --</option>
-              {lorries.map((l: any) => <option key={l.registration} value={l.registration}>{l.registration}</option>)}
-            </select>
+            <label className={`text-xs font-bold uppercase tracking-widest block mb-1 transition-colors ${!form.lorryReg ? 'text-amber-500' : 'text-slate-500'}`}>
+              Registration {!form.lorryReg && ' *'}
+            </label>
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                value={form.lorryReg} 
+                onChange={e => set('lorryReg', e.target.value.toUpperCase())}
+                placeholder="Type Reg..."
+                className={`flex-1 bg-slate-800 border ${!form.lorryReg ? 'border-amber-500/50' : 'border-white/10'} text-white px-3 py-2 rounded text-sm focus:border-primary outline-none uppercase font-mono transition-all`} 
+              />
+              <select 
+                value={lorries.some(l => l.registration === form.lorryReg) ? form.lorryReg : ''} 
+                onChange={e => handleLorryChange(e.target.value)}
+                className="w-24 bg-slate-800 border border-white/10 text-white px-2 py-2 rounded text-[10px] font-bold uppercase"
+              >
+                <option value="">FLEET</option>
+                {lorries.map((l: any) => <option key={l.registration} value={l.registration}>{l.registration}</option>)}
+              </select>
+            </div>
           </div>
 
           <div className="relative">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Customer / Site</label>
+            <label className={`text-xs font-bold uppercase tracking-widest block mb-1 transition-colors ${!form.customerName ? 'text-amber-500' : 'text-slate-500'}`}>
+              Customer / Site {!form.customerName && ' *'}
+            </label>
             <input type="text" value={form.customerName} onChange={e => handleNameChange(e.target.value)}
-              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
+              placeholder="Search customers..."
+              className={`w-full bg-slate-800 border ${!form.customerName ? 'border-amber-500/50' : 'border-white/10'} text-white px-3 py-2 rounded text-sm focus:border-primary outline-none transition-all`} />
             {suggestions.length > 0 && (
-              <div className="absolute z-10 w-full bg-slate-800 border border-white/10 rounded-lg mt-1 shadow-2xl max-h-48 overflow-y-auto">
+              <div className="absolute z-50 w-full bg-slate-800 border border-white/20 rounded-lg mt-1 shadow-[0_20px_50px_rgba(0,0,0,0.5)] max-h-64 overflow-y-auto">
                 {suggestions.map((c: any) => (
                   <button key={c.id} onClick={() => selectSuggestion(c)}
-                    className="w-full text-left px-4 py-2 hover:bg-slate-700 text-sm text-white flex justify-between border-b border-white/5 group transition-colors">
+                    className="w-full text-left px-4 py-3 hover:bg-primary hover:text-slate-900 text-sm text-white flex justify-between border-b border-white/5 group transition-all">
                     <div className="flex-1 min-w-0 pr-4">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold truncate">{c.name}</span>
+                        <span className="font-black truncate">{c.name}</span>
                         {c.updated_at && (
-                          <span className="text-[8px] font-black uppercase tracking-tighter px-1 rounded bg-slate-900 text-slate-500 group-hover:text-slate-300">
-                            Active {new Date(c.updated_at).toLocaleDateString()}
+                          <span className="text-[8px] font-black uppercase tracking-tighter px-1 rounded bg-slate-950 text-slate-500 group-hover:bg-white/20 group-hover:text-slate-900">
+                            Active
                           </span>
                         )}
                       </div>
+                      <p className="text-[10px] opacity-60 truncate">{c.billing_address || 'No address'}</p>
                     </div>
-                    <span className="text-[10px] text-slate-500 shrink-0">{c.phone}</span>
+                    <span className="text-[10px] font-bold shrink-0 self-center opacity-40 group-hover:opacity-100">{c.phone}</span>
                   </button>
                 ))}
               </div>
@@ -834,8 +886,13 @@ function WeighbridgeTab() {
 
         <button
           onClick={logMode === 'tipper' ? handleLogTipper : handleProcessWeight}
-          className="mt-6 w-full bg-primary hover:bg-primary-dark text-slate-900 py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all shadow-lg shadow-primary/10">
-          {logMode === 'tipper' ? '1. Log Truck IN' : '2. Finish & Print Ticket'}
+          className={`mt-6 w-full py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all shadow-lg ${
+            isFormValid 
+              ? 'bg-primary text-slate-900 shadow-primary/20 hover:scale-[1.02]' 
+              : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'
+          }`}
+        >
+          {logMode === 'tipper' ? '📥 Step 1: Log Truck IN' : '📤 Step 2: Finish & Print Ticket'}
         </button>
       </div>
     </div>
@@ -935,20 +992,20 @@ function BookingsTab() {
             placeholder="Start typing to search..."
           />
           {suggestions.length > 0 && (
-            <div className="absolute z-10 w-full bg-slate-800 border border-white/10 rounded-lg mt-1 shadow-xl">
+            <div className="absolute z-50 w-full bg-slate-800 border border-white/20 rounded-lg mt-1 shadow-[0_20px_50px_rgba(0,0,0,0.5)] max-h-64 overflow-y-auto">
               {suggestions.map((c: any) => (
                 <button key={c.id} onClick={() => selectSuggestion(c)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-slate-700 text-sm text-white flex justify-between items-center group transition-colors">
+                  className="w-full text-left px-4 py-3 hover:bg-primary hover:text-slate-900 text-sm text-white flex justify-between border-b border-white/5 group transition-all">
                   <div className="flex-1 min-w-0 pr-4">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold truncate">{c.name}</span>
+                      <span className="font-black truncate">{c.name}</span>
                       {c.updated_at && (
-                        <span className="text-[8px] font-black uppercase tracking-tighter px-1 rounded bg-slate-900 text-slate-500 group-hover:text-slate-300">
-                          Active {new Date(c.updated_at).toLocaleDateString()}
+                        <span className="text-[8px] font-black uppercase tracking-tighter px-1 rounded bg-slate-950 text-slate-500 group-hover:bg-white/20 group-hover:text-slate-900">
+                          Active
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] text-slate-500 truncate">{c.billing_address || 'No address'}</p>
+                    <p className="text-[10px] opacity-60 truncate">{c.billing_address || 'No address'}</p>
                   </div>
                   <div className="text-right shrink-0">
                     <span className={`text-xs font-black ${c.account_balance > (DEFAULT_CONFIG.creditLimit || 500) ? 'text-red-400' : 'text-slate-400'}`}>
@@ -1750,6 +1807,7 @@ function MapTab() {
 
   useEffect(() => {
     if (mapLoaded && (!loading)) initMap()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapLoaded, skips, vehicles, liveOrders, externalPoints, loading, visibleLayers])
 
   async function loadMapData() {

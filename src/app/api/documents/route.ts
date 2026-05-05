@@ -5,6 +5,8 @@
  * GET /api/documents?type=WTN&ticketNumber=ENV-12345
  * GET /api/documents?type=DTN&orderId=abc-123
  */
+export const dynamic = 'force-dynamic'
+
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { WASTE_CODES, DEFAULT_CONFIG } from '@/lib/config'

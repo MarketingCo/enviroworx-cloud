@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextResponse } from 'next/server'
 import { parseEnviroworxKml } from '@/lib/kml-parser'
 import { supabaseAdmin } from '@/lib/supabase'

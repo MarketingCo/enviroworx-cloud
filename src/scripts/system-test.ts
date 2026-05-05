@@ -77,7 +77,7 @@ async function testSystem() {
       latitude: 55.9533,
       longitude: -3.1883,
       last_updated: new Date().toISOString()
-    }).eq('registration', 'AUDIT-1').or('reg.eq.AUDIT-1') // Just testing query capability
+    }).eq('reg', 'AUDIT-1') // Just testing query capability
     
     results.fleetDB = !telErr
     console.log(results.fleetDB ? '✅ Fleet telemetry storage OK' : '❌ Fleet DB update fail (likely no match, but query ran)')

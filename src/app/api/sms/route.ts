@@ -2,6 +2,8 @@
  * SMS API Route (replaces sendTwilioSMS from Code.gs)
  * POST /api/sms { to: "+447...", body: "message" }
  */
+export const dynamic = 'force-dynamic'
+
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {

@@ -1,5 +1,7 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin, safeActivityLog } from '@/lib/supabase'
 import { logToDrive } from '@/app/actions/drive'
 
 export async function GET(req: NextRequest) {
@@ -37,8 +39,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // @ts-ignore
-    await supabaseAdmin.from('activity_log').insert({
+    await safeActivityLog({
       type: 'SYS',
       message: `Monthly SEPA Compliance Logged to Google Drive: ${unpaidInvoices.length} items.`,
       status: 'Completed'

@@ -50,3 +50,23 @@ export function getRealtimeChannel(table: string) {
       return payload
     })
 }
+
+/**
+ * Safely log to activity_log table.
+ * Gracefully handles missing table (e.g. during build or if schema not migrated).
+ */
+export async function safeActivityLog(payload: {
+  type: string
+  message: string
+  status: string
+}) {
+  try {
+    await supabaseAdmin.from('activity_log').insert({
+      ...payload,
+      created_at: new Date().toISOString(),
+    })
+  } catch (e) {
+    // Silently ignore if activity_log doesn't exist yet
+    console.warn('Activity log skipped:', e)
+  }
+}

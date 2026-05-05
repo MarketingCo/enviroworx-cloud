@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
@@ -57,7 +59,7 @@ export async function GET() {
 
       if (!reg || !lat || !lng) continue;
 
-      const { error: updateError } = await (supabaseAdmin.from('vehicles') as any)
+      const { error: updateError } = await supabaseAdmin.from('vehicles')
         .update({
           latitude: lat,
           longitude: lng,
@@ -79,8 +81,11 @@ export async function GET() {
     }
 
     if (telemetryInserts.length > 0) {
-      // @ts-ignore
-      await supabaseAdmin.from('vehicle_telemetry').insert(telemetryInserts).catch(console.error);
+      try {
+        await supabaseAdmin.from('vehicle_telemetry').insert(telemetryInserts)
+      } catch (e) {
+        console.error('Vehicle telemetry insert error:', e)
+      }
     }
 
     return NextResponse.json({ success: true, updated: telemetryInserts.length })

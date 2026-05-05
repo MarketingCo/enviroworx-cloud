@@ -248,6 +248,19 @@ export default function CustomerPortal() {
     setTab('overview')
   }
 
+  // Handle Stripe redirect back
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('payment') === 'success') {
+      toast.success('💳 Payment received! Your account will update shortly.')
+      window.history.replaceState({}, '', '/portal')
+    } else if (params.get('payment') === 'cancelled') {
+      toast('Payment cancelled.', { icon: 'ℹ️' })
+      window.history.replaceState({}, '', '/portal')
+    }
+  }, [screen])
+
   // ── LOGIN SCREEN ──
   if (screen === 'login') {
     return (
@@ -296,19 +309,6 @@ export default function CustomerPortal() {
       </div>
     )
   }
-
-  // Handle Stripe redirect back
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('payment') === 'success') {
-      toast.success('💳 Payment received! Your account will update shortly.')
-      window.history.replaceState({}, '', '/portal')
-    } else if (params.get('payment') === 'cancelled') {
-      toast('Payment cancelled.', { icon: 'ℹ️' })
-      window.history.replaceState({}, '', '/portal')
-    }
-  }, [screen])
 
   // ── DASHBOARD ──
   const totalSpend = getTotalSpend()

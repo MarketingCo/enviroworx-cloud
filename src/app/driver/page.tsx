@@ -68,6 +68,7 @@ export default function DriverApp() {
   useEffect(() => {
     if (isConfigMissing) { setLoading(false); return }
     loadInitialData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function loadInitialData() {

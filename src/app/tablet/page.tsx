@@ -41,6 +41,7 @@ export default function TabletApp() {
     loadData()
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Realtime shift updates
