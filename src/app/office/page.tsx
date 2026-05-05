@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import {
   getDashboardStats,
@@ -483,9 +483,8 @@ function WeighbridgeTab() {
     tareWeight: '', skipSize: 'Tipper', skipId: '', address: 'Yard', direction: 'On-site',
     paymentMethod: 'Invoice', amountPaid: '', wbNotes: '', tipperRowIndex: ''
   })
-  const [logMode, setLogMode] = useState<'full' | 'tipper'>('tipper')
   const [suggestions, setSuggestions] = useState<any[]>([])
-  const [searchTimer, setSearchTimer] = useState<any>(null)
+  const searchTimerRef = useRef<any>(null)
 
   useEffect(() => {
     loadData()
@@ -509,12 +508,12 @@ function WeighbridgeTab() {
 
   function handleNameChange(v: string) {
     set('customerName', v)
-    clearTimeout(searchTimer)
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
     if (v.length > 2) {
-      setSearchTimer(setTimeout(async () => {
+      searchTimerRef.current = setTimeout(async () => {
         const results = await searchCustomers(v)
         setSuggestions(results)
-      }, 300))
+      }, 300)
     } else {
       setSuggestions([])
     }
@@ -576,8 +575,7 @@ function WeighbridgeTab() {
       direction: 'On-site',
     }))
     setManualOverride('')
-    setLogMode('full')
-    toast.success(`Loaded ${t.reg || 'Truck'}. Weight captured from scale.`)
+    toast.success(`Loaded ${t.reg || 'Truck'} from yard. Ready to process.`)
   }
   async function handleLogTipper() {
     if (!form.lorryReg || !form.customerName) {
@@ -605,8 +603,6 @@ function WeighbridgeTab() {
       toast.error(result.message)
     }
   }
-
-  const isFormValid = form.lorryReg && form.customerName;
 
   async function handleProcessWeight() {
     if (!form.lorryReg || !form.customerName || !form.grossWeight || !form.tareWeight) {
@@ -643,7 +639,6 @@ function WeighbridgeTab() {
       setForm({ lorryReg: '', customerName: '', grossWeight: '', tareWeight: '', skipId: '', amountPaid: '', wbNotes: '', tipperRowIndex: '', wasteType: 'Mix Con', skipSize: 'Tipper', address: 'Yard', direction: 'On-site', paymentMethod: 'Invoice' })
       setManualOverride('')
       setTareMsg('')
-      setLogMode('tipper')
     } else {
       toast.error(result.message)
     }
@@ -705,14 +700,7 @@ function WeighbridgeTab() {
       {/* Log Form */}
       <div className="lg:col-span-3 bg-slate-900 border border-white/5 rounded-xl p-5 shadow-2xl">
         <div className="flex justify-between items-center mb-6">
-          <div className="flex gap-2">
-            {(['tipper', 'full'] as const).map(m => (
-              <button key={m} onClick={() => setLogMode(m)}
-                className={`px-4 py-1.5 rounded text-xs font-black uppercase tracking-widest transition-all ${logMode === m ? 'bg-primary text-slate-900 shadow-lg shadow-primary/20' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
-                {m === 'tipper' ? '📥 Step 1: Log IN' : '📤 Step 2: Final / OUT'}
-              </button>
-            ))}
-          </div>
+          <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500">Weighbridge</h3>
           <button 
             onClick={() => {
               setForm({ lorryReg: '', customerName: '', wasteType: 'Mix Con', grossWeight: '', tareWeight: '', skipSize: 'Tipper', skipId: '', address: 'Yard', direction: 'On-site', paymentMethod: 'Invoice', amountPaid: '', wbNotes: '', tipperRowIndex: '' })
@@ -810,71 +798,67 @@ function WeighbridgeTab() {
               className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
           </div>
 
-          {logMode === 'full' && (
-            <>
-              <div>
-                <div className="flex justify-between items-end mb-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tare (kg)</label>
-                  <button onClick={() => captureWeight('tareWeight')} className="text-[9px] font-black text-primary uppercase hover:underline">Capture Scale</button>
+          <div>
+            <div className="flex justify-between items-end mb-1">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tare (kg)</label>
+              <button onClick={() => captureWeight('tareWeight')} className="text-[9px] font-black text-primary uppercase hover:underline">Capture Scale</button>
+            </div>
+            <input type="number" value={form.tareWeight} onChange={e => { set('tareWeight', e.target.value); setTareMsg('') }}
+              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
+            {tareMsg && <p className={`text-[10px] mt-1 ${tareMsg === 'Auto-filled' ? 'text-primary' : 'text-amber-400'}`}>{tareMsg}</p>}
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Direction</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[{ val: 'On-site', label: '↓ IN' }, { val: 'Off-site', label: '↑ OUT' }].map(d => (
+                <button key={d.val} type="button" onClick={() => set('direction', d.val)}
+                  className={`py-2 rounded text-[10px] font-black transition-all ${form.direction === d.val ? (d.val === 'On-site' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white') : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Payment</label>
+            <select value={form.paymentMethod} onChange={e => set('paymentMethod', e.target.value)}
+              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm">
+              <option>Invoice</option><option>Cash</option><option>Card</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Amount Paid (£)</label>
+            <input type="number" value={form.amountPaid} onChange={e => set('amountPaid', e.target.value)}
+              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
+          </div>
+
+          <div className="col-span-2">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Notes</label>
+            <input type="text" value={form.wbNotes} onChange={e => set('wbNotes', e.target.value)}
+              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
+          </div>
+
+          {(gross > 0 || tare > 0) && (
+            <div className="col-span-2 bg-slate-800 border border-white/5 rounded-lg p-4 space-y-3 shadow-inner">
+              <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                <div>
+                  <p className="text-[10px] text-slate-500 uppercase font-black">Net Weight</p>
+                  <p className="text-2xl font-black text-white">{net.toLocaleString()} <span className="text-xs">kg</span></p>
                 </div>
-                <input type="number" value={form.tareWeight} onChange={e => { set('tareWeight', e.target.value); setTareMsg('') }}
-                  className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
-                {tareMsg && <p className={`text-[10px] mt-1 ${tareMsg === 'Auto-filled' ? 'text-primary' : 'text-amber-400'}`}>{tareMsg}</p>}
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Direction</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[{ val: 'On-site', label: '↓ IN' }, { val: 'Off-site', label: '↑ OUT' }].map(d => (
-                    <button key={d.val} type="button" onClick={() => set('direction', d.val)}
-                      className={`py-2 rounded text-[10px] font-black transition-all ${form.direction === d.val ? (d.val === 'On-site' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white') : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
-                      {d.label}
-                    </button>
-                  ))}
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-500 uppercase font-black">Total Cost</p>
+                  <p className="text-2xl font-black text-primary">{displayLabel}</p>
                 </div>
               </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Payment</label>
-                <select value={form.paymentMethod} onChange={e => set('paymentMethod', e.target.value)}
-                  className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm">
-                  <option>Invoice</option><option>Cash</option><option>Card</option>
-                </select>
+              <div className="flex items-center gap-3">
+                <label className="text-[10px] text-slate-500 font-black uppercase whitespace-nowrap">Price Override (£)</label>
+                <input type="number" value={manualOverride} onChange={e => setManualOverride(e.target.value)}
+                  placeholder="Auto" min="0" step="0.01"
+                  className="w-full bg-slate-700 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
               </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Amount Paid (£)</label>
-                <input type="number" value={form.amountPaid} onChange={e => set('amountPaid', e.target.value)}
-                  className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
-              </div>
-
-              <div className="col-span-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Notes</label>
-                <input type="text" value={form.wbNotes} onChange={e => set('wbNotes', e.target.value)}
-                  className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
-              </div>
-
-              {(gross > 0 || tare > 0) && (
-                <div className="col-span-2 bg-slate-800 border border-white/5 rounded-lg p-4 space-y-3 shadow-inner">
-                  <div className="flex justify-between items-center border-b border-white/5 pb-3">
-                    <div>
-                      <p className="text-[10px] text-slate-500 uppercase font-black">Net Weight</p>
-                      <p className="text-2xl font-black text-white">{net.toLocaleString()} <span className="text-xs">kg</span></p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-slate-500 uppercase font-black">Total Cost</p>
-                      <p className="text-2xl font-black text-primary">{displayLabel}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <label className="text-[10px] text-slate-500 font-black uppercase whitespace-nowrap">Price Override (£)</label>
-                    <input type="number" value={manualOverride} onChange={e => setManualOverride(e.target.value)}
-                      placeholder="Auto" min="0" step="0.01"
-                      className="w-full bg-slate-700 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
-                  </div>
-                </div>
-              )}
-            </>
+            </div>
           )}
 
           <div className="col-span-2">
@@ -884,16 +868,22 @@ function WeighbridgeTab() {
           </div>
         </div>
 
-        <button
-          onClick={logMode === 'tipper' ? handleLogTipper : handleProcessWeight}
-          className={`mt-6 w-full py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all shadow-lg ${
-            isFormValid 
-              ? 'bg-primary text-slate-900 shadow-primary/20 hover:scale-[1.02]' 
-              : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'
-          }`}
-        >
-          {logMode === 'tipper' ? '📥 Step 1: Log Truck IN' : '📤 Step 2: Finish & Print Ticket'}
-        </button>
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <button
+            onClick={handleLogTipper}
+            disabled={!form.lorryReg || !form.customerName}
+            className="w-full py-3 rounded-xl font-black uppercase tracking-widest text-[11px] transition-all border border-primary/30 text-primary hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            📥 Send to Yard
+          </button>
+          <button
+            onClick={handleProcessWeight}
+            disabled={!form.lorryReg || !form.customerName || !form.grossWeight || !form.tareWeight}
+            className="w-full py-3 rounded-xl font-black uppercase tracking-widest text-[11px] transition-all shadow-lg bg-primary text-slate-900 shadow-primary/20 hover:scale-[1.02] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100"
+          >
+            📤 Process & Print Ticket
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -912,7 +902,7 @@ function BookingsTab() {
   })
   const [loading, setLoading] = useState(false)
   const [suggestions, setSuggestions] = useState<any[]>([])
-  const [searchTimer, setSearchTimer] = useState<any>(null)
+  const searchTimerRef = useRef<any>(null)
   const [geocoding, setGeocoding] = useState(false)
 
   function set(k: string, v: any) { setForm(f => ({ ...f, [k]: v })) }
@@ -930,12 +920,12 @@ function BookingsTab() {
 
   function handleNameChange(v: string) {
     set('customerName', v)
-    clearTimeout(searchTimer)
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
     if (v.length > 2) {
-      setSearchTimer(setTimeout(async () => {
+      searchTimerRef.current = setTimeout(async () => {
         const results = await searchCustomers(v)
         setSuggestions(results)
-      }, 300))
+      }, 300)
     } else {
       setSuggestions([])
     }
