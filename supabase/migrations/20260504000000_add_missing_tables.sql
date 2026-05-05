@@ -138,7 +138,13 @@ CREATE INDEX IF NOT EXISTS idx_vehicle_telemetry_created ON public.vehicle_telem
 
 -- ============================================================
 -- VIEWS
+-- Drop first to avoid column rename conflicts
 -- ============================================================
+
+DROP VIEW IF EXISTS public.v_collections_due;
+DROP VIEW IF EXISTS public.v_driver_hours_today;
+DROP VIEW IF EXISTS public.v_inventory_summary;
+DROP VIEW IF EXISTS public.v_unpaid_invoices;
 
 -- Collections due view
 CREATE OR REPLACE VIEW public.v_collections_due AS
@@ -158,13 +164,12 @@ WHERE i.status IN ('Delivered', 'In Use');
 CREATE OR REPLACE VIEW public.v_driver_hours_today AS
 SELECT
   d.name AS driver_name,
-  d.status,
   COALESCE(dh.hours_worked, 0) AS hours_today,
   dh.clock_in AS last_clock_in,
   CASE WHEN dh.clock_out IS NULL AND dh.clock_in IS NOT NULL THEN TRUE ELSE FALSE END AS currently_clocked_in,
   dh.vehicle_reg AS current_lorry
 FROM public.drivers d
-LEFT JOIN public.driver_hours dh ON dh.driver_id = d.id AND dh.date = CURRENT_DATE;
+LEFT JOIN public.driver_hours dh ON dh.driver_id = d.id::text AND dh.date = CURRENT_DATE;
 
 -- Inventory summary view
 CREATE OR REPLACE VIEW public.v_inventory_summary AS
