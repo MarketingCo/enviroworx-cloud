@@ -1,0 +1,5 @@
+[safe]
+	directory = /mnt/agents/enviroworx-cloud
+[user]
+	email = dev@enviroworx.co.uk
+	name = Enviroworx Dev

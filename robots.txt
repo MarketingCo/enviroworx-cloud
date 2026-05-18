@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://enviroworx.co.uk/sitemap.xml

@@ -1,0 +1,59 @@
+export const dynamic = 'force-dynamic'
+
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin, safeActivityLog } from '@/lib/supabase'
+import { logToDrive } from '@/app/actions/drive'
+import { verifyCronSecret } from '@/lib/auth'
+
+export async function GET(req: NextRequest) {
+  if (!verifyCronSecret(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
+    const { searchParams } = new URL(req.url)
+    const customStart = searchParams.get('start')
+    const customEnd = searchParams.get('end')
+
+    const today = new Date()
+    // Default to previous month if no params provided
+    const start = customStart ? new Date(customStart).toISOString() : new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString()
+    const end = customEnd ? new Date(customEnd).toISOString() : new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59).toISOString()
+
+    // Use the v_unpaid_invoices view which aggregates Orders AND Cash Logs
+    const { data: unpaidInvoices, error: vError } = await supabaseAdmin
+      .from('v_unpaid_invoices')
+      .select('*')
+      .gte('date', start.split('T')[0])
+      .lte('date', end.split('T')[0])
+
+    if (!unpaidInvoices || unpaidInvoices.length === 0) {
+      return NextResponse.json({ message: 'No unpaid invoices for previous month. SEPA Sheets not updated.' })
+    }
+
+    for (const inv of unpaidInvoices) {
+      await logToDrive({
+        date: inv.date || '',
+        ticketNumber: inv.skip_id || 'N/A',
+        customerName: inv.customer_name || 'Unknown',
+        address: inv.address || 'N/A',
+        amountPaid: 0, // Invoices in this view are unpaid
+        costGross: inv.amount || 0,
+        paymentMethod: 'Invoice',
+        sheetName: 'SEPA'
+      });
+    }
+
+    await safeActivityLog({
+      type: 'SYS',
+      message: `Monthly SEPA Compliance Logged to Google Drive: ${unpaidInvoices.length} items.`,
+      status: 'Completed'
+    })
+
+    return NextResponse.json({ success: true, count: unpaidInvoices.length })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('SEPA Sheets Cron Error:', error)
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}

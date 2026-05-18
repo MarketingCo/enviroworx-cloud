@@ -1,0 +1,6 @@
+-- Migration: Enforce NOT NULL on customer_id after backfill verification
+-- UNCOMMENT after confirming all rows have customer_id
+-- 
+-- ALTER TABLE orders ALTER COLUMN customer_id SET NOT NULL;
+-- ALTER TABLE cash_log ALTER COLUMN customer_id SET NOT NULL;
+-- ALTER TABLE weight_logs ALTER COLUMN customer_id SET NOT NULL;

@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #059669;
+  --primary-dark: #047857;
+  --primary-light: #d1fae5;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+}
+
+/* Smooth scrolling for all scrollable containers */
+* { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+*::-webkit-scrollbar { width: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+/* Drag and drop styles */
+.drag-over { border-color: var(--primary) !important; background: var(--primary-light) !important; }
+.dragging { opacity: 0.5; }
+
+/* Job card type colors */
+.job-border-delivery { border-left: 5px solid #10b981; }
+.job-border-collection { border-left: 5px solid #ef4444; }
+.job-border-exchange { border-left: 5px solid #f59e0b; }
+.job-border-wait { border-left: 5px solid #3b82f6; }
+.job-border-cage { border-left: 5px solid #8b5cf6; }
