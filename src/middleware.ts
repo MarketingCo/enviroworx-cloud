@@ -1,36 +1,46 @@
+import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-/**
- * Next.js middleware — protects route prefixes that should not be
- * accessible without an active session.
- *
- * Protected:
- *   /office/*   → requires Supabase session cookie (redirects to /office/login)
- *
- * Unprotected (own login systems):
- *   /portal     → customer portal (own login)
- *   /driver     → driver tablet app (own login)
- *   /tablet     → yard tablet app (own login)
- */
 export async function middleware(req: NextRequest) {
   // Skip API routes and static files
-  if (req.nextUrl.pathname.startsWith('/api') ||
-      req.nextUrl.pathname.startsWith('/_next') ||
-      req.nextUrl.pathname.includes('.')) {
+  if (
+    req.nextUrl.pathname.startsWith('/api') ||
+    req.nextUrl.pathname.startsWith('/_next') ||
+    req.nextUrl.pathname.includes('.')
+  ) {
     return NextResponse.next()
   }
 
-  // Check for auth session on protected routes
-  if (req.nextUrl.pathname.startsWith('/office')) {
-    // Allow login page
-    if (req.nextUrl.pathname === '/office/login') {
-      return NextResponse.next()
-    }
+  // Allow login pages
+  if (req.nextUrl.pathname === '/office/login') {
+    return NextResponse.next()
+  }
 
-    // Check for session cookie
-    const sessionCookie = req.cookies.get('sb-session') || req.cookies.get('supabase-auth-token')
-    if (!sessionCookie) {
+  // Protect /office routes (but not /office/login)
+  if (
+    req.nextUrl.pathname.startsWith('/office') &&
+    req.nextUrl.pathname !== '/office/login'
+  ) {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return req.cookies.get(name)?.value
+          },
+          set() {},
+          remove() {},
+        },
+      }
+    )
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
       return NextResponse.redirect(new URL('/office/login', req.url))
     }
   }
@@ -39,5 +49,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/office/:path*', '/portal', '/driver', '/tablet'],
+  matcher: ['/office/:path*'],
 }

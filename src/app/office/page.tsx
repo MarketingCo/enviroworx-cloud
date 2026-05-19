@@ -1,167 +1,162 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { Database } from '@/lib/database.types'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { getDashboardStats } from '@/lib/api'
-import toast, { Toaster } from 'react-hot-toast'
-import {
-  LayoutDashboard,
-  Truck,
-  Weight,
-  CalendarPlus,
-  Users,
-  FileText,
-  Wrench,
-  Package,
-  TrendingUp,
-  RefreshCw,
-  Settings,
-} from 'lucide-react'
-import {
-  DashboardTab,
-  DispatchTab,
-  WeighbridgeTab,
-  BookingsTab,
-  CustomersTab,
-  ReportsTab,
-  InventoryTab,
-  FleetTab,
-  MapTab,
-  SettingsTab,
-  type DashStats,
-} from './_tabs'
-
-// ─── Tab Type ────────────────────────────────────────────────────────────────
-
-type Tab = 'dashboard' | 'dispatch' | 'weighbridge' | 'bookings' | 'customers' | 'reports' | 'fleet' | 'inventory' | 'map' | 'settings'
-
-// ─── Main Office Page ─────────────────────────────────────────────────────────
+import { useRouter } from 'next/navigation'
+import { format } from 'date-fns'
 
 export default function OfficePage() {
-  const [tab, setTab] = useState<Tab>('dashboard')
-  const [dashData, setDashData] = useState<DashStats | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
-
-  const loadDash = useCallback(async () => {
-    setRefreshing(true)
-    try {
-      const data = await getDashboardStats()
-      setDashData(data)
-    } catch {
-      toast.error('Failed to load dashboard')
-    }
-    setRefreshing(false)
-  }, [])
+  const router = useRouter()
+  const [activeTab, setActiveTab] = useState('orders')
+  const [stats, setStats] = useState({
+    activeJobs: 0,
+    completedToday: 0,
+    availableDrivers: 0,
+    pendingInvoices: 0,
+  })
+  const [recentOrders, setRecentOrders] = useState<Array<{
+    id: string; customer_name: string | null; address: string | null; skip_size: string | null; status: string | null; date: string | null
+  }>>([])
 
   useEffect(() => {
-    loadDash()
-    const interval = setInterval(loadDash, 120000)
+    loadDashboard()
+  }, [])
 
-    const ch = supabase.channel('office-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'active_tippers' }, (payload) => {
-        loadDash()
-        if (payload.eventType === 'INSERT') toast('🚛 New tipper in yard', { duration: 4000 })
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-        loadDash()
-        const o = payload.new as Database["public"]["Tables"]["orders"]["Row"]
-        toast.success(`📋 New booking: ${o.job_type || 'Order'} — ${o.customer_name || 'Customer'}`, { duration: 6000 })
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
-        loadDash()
-        const o = payload.new as Database["public"]["Tables"]["orders"]["Row"]
-        if (o.status === 'Completed') {
-          toast.success(`✅ Job completed: ${o.customer_name || 'Order'} · ${o.address || ''}`, { duration: 5000 })
-        } else if (o.status === 'Aborted') {
-          toast.error(`⛔ Job aborted: ${o.customer_name || 'Order'}`, { duration: 5000 })
-        }
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cash_log' }, (payload) => {
-        loadDash()
-        const cl = payload.new as Database["public"]["Tables"]["cash_log"]["Row"]
-        toast(`⚖️ Weighbridge: ${cl.customer_name || 'Customer'} — ${cl.net_weight ?? '?'}kg`, { duration: 4000 })
-      })
-      .subscribe()
+  async function loadDashboard() {
+    const today = format(new Date(), 'yyyy-MM-dd')
 
-    return () => { clearInterval(interval); supabase.removeChannel(ch) }
-  }, [loadDash])
+    const { count: activeJobs } = await supabase
+      .from('orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('date', today)
+      .in('status', ['Booked', 'Assigned'])
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
-    { id: 'dispatch', label: 'Dispatch', icon: <Truck size={16} /> },
-    { id: 'weighbridge', label: 'Weighbridge', icon: <Weight size={16} /> },
-    { id: 'bookings', label: 'New Booking', icon: <CalendarPlus size={16} /> },
-    { id: 'customers', label: 'Customers', icon: <Users size={16} /> },
-    { id: 'reports', label: 'Reports', icon: <FileText size={16} /> },
-    { id: 'fleet', label: 'Fleet', icon: <Wrench size={16} /> },
-    { id: 'inventory', label: 'Inventory', icon: <Package size={16} /> },
-    { id: 'map', label: 'Live Map', icon: <TrendingUp size={16} /> },
-    { id: 'settings', label: 'Settings', icon: <Settings size={16} /> },
-  ]
+    const { count: completedToday } = await supabase
+      .from('orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('date', today)
+      .eq('status', 'Completed')
 
-  const isConfigMissing = !process.env.NEXT_PUBLIC_SUPABASE_URL
+    const { count: availableDrivers } = await supabase
+      .from('drivers')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'Available')
+
+    const { count: pendingInvoices } = await supabase
+      .from('orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'Completed')
+      .eq('payment_method', 'Invoice')
+      .eq('paid', false)
+
+    setStats({
+      activeJobs: activeJobs ?? 0,
+      completedToday: completedToday ?? 0,
+      availableDrivers: availableDrivers ?? 0,
+      pendingInvoices: pendingInvoices ?? 0,
+    })
+
+    const { data: orders } = await supabase
+      .from('orders')
+      .select('id, customer_name, address, skip_size, status, date')
+      .eq('date', today)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    setRecentOrders(orders ?? [])
+  }
+
+  const tabs = ['orders', 'dispatch', 'settings']
 
   return (
-    <div className="bg-slate-950 min-h-screen text-white">
-      <Toaster position="top-right" toastOptions={{ style: { background: '#1e293b', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' } }} />
-
-      {/* Header */}
-      <header className="border-b border-white/5 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-screen-2xl mx-auto px-6 h-14 flex items-center justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 bg-primary rounded flex items-center justify-center font-black italic text-xs">E</div>
-            <span className="font-black italic tracking-tighter uppercase text-sm">Enviroworx <span className="text-primary">Office</span></span>
+    <div className="min-h-screen bg-slate-950 text-white p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-black tracking-tight">Enviroworx Office</h1>
+            <p className="text-slate-400 mt-1">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
           </div>
+          <button
+            className="border border-slate-700 rounded px-4 py-2 text-sm hover:bg-slate-800 transition-colors"
+            onClick={() => {
+              supabase.auth.signOut()
+              router.push('/office/login')
+            }}
+          >
+            Sign Out
+          </button>
+        </div>
 
-          {/* Nav */}
-          <nav className="flex items-center gap-1 overflow-x-auto">
-            {tabs.map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-black uppercase tracking-wide transition-all whitespace-nowrap ${
-                  tab === t.id ? 'bg-primary text-white' : 'text-slate-500 hover:text-white hover:bg-slate-800'
-                }`}>
-                {t.icon} {t.label}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { label: 'Active Jobs', value: stats.activeJobs, color: 'text-blue-400' },
+            { label: 'Completed Today', value: stats.completedToday, color: 'text-green-400' },
+            { label: 'Available Drivers', value: stats.availableDrivers, color: 'text-yellow-400' },
+            { label: 'Pending Invoices', value: stats.pendingInvoices, color: 'text-orange-400' },
+          ].map((stat) => (
+            <div key={stat.label} className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+              <p className="text-sm text-slate-400">{stat.label}</p>
+              <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="border-b border-slate-800">
+          <div className="flex gap-1">
+            {tabs.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 text-sm font-medium capitalize rounded-t-lg transition-colors ${
+                  activeTab === tab
+                    ? 'bg-slate-900 text-white border-t border-x border-slate-800'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {tab}
               </button>
             ))}
-          </nav>
-
-          <div className="flex items-center gap-3">
-            {tab === 'dashboard' && (
-              <button onClick={loadDash} disabled={refreshing}
-                className={`flex items-center gap-1.5 text-xs text-slate-500 hover:text-white transition-colors ${refreshing ? 'animate-spin' : ''}`}>
-                <RefreshCw size={14} />
-              </button>
-            )}
-            <div className="flex gap-2">
-              <a href="/driver" target="_blank" className="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-white px-2 py-1 rounded bg-slate-900 border border-white/5">Driver</a>
-              <a href="/portal" target="_blank" className="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-white px-2 py-1 rounded bg-slate-900 border border-white/5">Portal</a>
-              <a href="/tablet" target="_blank" className="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-white px-2 py-1 rounded bg-slate-900 border border-white/5">Tablet</a>
-            </div>
           </div>
         </div>
-      </header>
 
-      {/* Config warning */}
-      {isConfigMissing && (
-        <div className="bg-yellow-500/10 border-b border-yellow-500/20 px-6 py-3 text-center">
-          <p className="text-yellow-400 text-xs font-bold">Supabase not configured — add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local</p>
-        </div>
-      )}
+        {activeTab === 'orders' && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold">Today&apos;s Orders</h2>
+            <div className="space-y-2">
+              {recentOrders.map((order) => (
+                <div key={order.id} className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-lg p-4">
+                  <div>
+                    <p className="font-medium">{order.customer_name}</p>
+                    <p className="text-sm text-slate-400">{order.address} — {order.skip_size}yd</p>
+                  </div>
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                    order.status === 'Completed' ? 'bg-green-900 text-green-300' :
+                    order.status === 'Assigned' ? 'bg-blue-900 text-blue-300' :
+                    'bg-yellow-900 text-yellow-300'
+                  }`}>{order.status}</span>
+                </div>
+              ))}
+              {recentOrders.length === 0 && (
+                <p className="text-slate-500 text-center py-8">No orders for today</p>
+              )}
+            </div>
+          </div>
+        )}
 
-      {/* Content */}
-      <main className="max-w-screen-2xl mx-auto px-6 py-8">
-        {tab === 'dashboard' && <DashboardTab data={dashData} onRefresh={loadDash} />}
-        {tab === 'dispatch' && <DispatchTab />}
-        {tab === 'weighbridge' && <WeighbridgeTab />}
-        {tab === 'bookings' && <BookingsTab />}
-        {tab === 'customers' && <CustomersTab />}
-        {tab === 'reports' && <ReportsTab />}
-        {tab === 'fleet' && <FleetTab />}
-        {tab === 'inventory' && <InventoryTab />}
-        {tab === 'map' && <MapTab />}
-        {tab === 'settings' && <SettingsTab />}
-      </main>
+        {activeTab === 'dispatch' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-8 text-center">
+            <h3 className="text-lg font-medium text-slate-300">Dispatch</h3>
+            <p className="text-slate-500 mt-2">Tab components are being rebuilt. Check back soon.</p>
+          </div>
+        )}
+
+        {activeTab === 'settings' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-8 text-center">
+            <h3 className="text-lg font-medium text-slate-300">Settings</h3>
+            <p className="text-slate-500 mt-2">Settings tab is being rebuilt. Check back soon.</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

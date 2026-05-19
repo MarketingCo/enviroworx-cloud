@@ -7,6 +7,10 @@ import { sendSms } from '@/lib/sms'
 import { verifyCronSecret } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
+  if (!process.env.CRON_SECRET) {
+    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
+  }
+
   if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -20,7 +24,7 @@ export async function GET(req: NextRequest) {
     const { data: collections, error } = await supabaseAdmin
       .from('orders')
       .select('*')
-      .eq('date', tomorrowStr)
+      .eq('date', tomorrowStr!)
       .eq('job_type', 'Collection')
       .neq('status', 'Cancelled')
       .neq('status', 'Aborted')

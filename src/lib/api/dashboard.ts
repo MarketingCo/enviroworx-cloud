@@ -5,7 +5,10 @@ import { supabase } from '../supabase'
 import { DEFAULT_CONFIG } from '../config'
 
 export async function getDashboardStats() {
-  const today = new Date().toISOString().split('T')[0]
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    throw new Error('NEXT_PUBLIC_SUPABASE_URL not set')
+  }
+  const today = new Date().toISOString().split('T')[0]!
   const weekStart = getWeekStart()
   const twoDaysAway = new Date()
   twoDaysAway.setDate(twoDaysAway.getDate() + 2)

@@ -9,23 +9,8 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { verifyPin } from '@/lib/auth'
 import { rateLimit, getClientIdentifier } from '@/lib/rate-limit'
-
-// Simple PIN verification using timing-safe comparison
-// In production, use bcrypt.compare against a hashed PIN field
-async function verifyPin(plainPin: string, pinHash: string | null): Promise<boolean> {
-  if (!pinHash) return false
-  // If the stored value is a bcrypt hash, we'd use bcrypt.compare here
-  // For now we support both plaintext (legacy) and hashed formats
-  if (pinHash.startsWith('$2')) {
-    // bcrypt hash - in production install bcrypt and use it:
-    // return await bcrypt.compare(plainPin, pinHash)
-    // For now, fallback: compare hashes using Web Crypto for non-bcrypt
-    return false // Require bcrypt library to be installed
-  }
-  // Legacy plaintext comparison (remove after migration)
-  return pinHash === plainPin
-}
 
 // Create a simple signed token (in production, use jose or jsonwebtoken)
 function createSessionToken(driverId: string, driverName: string): string {
@@ -36,7 +21,6 @@ function createSessionToken(driverId: string, driverName: string): string {
     iat: Date.now(),
     exp: Date.now() + 12 * 60 * 60 * 1000, // 12 hours
   }
-  // Simple base64 token (replace with proper JWT in production)
   return Buffer.from(JSON.stringify(payload)).toString('base64url')
 }
 
@@ -60,7 +44,7 @@ export async function POST(req: NextRequest) {
     // Look up driver by ID
     const { data: driver, error } = await supabaseAdmin
       .from('drivers')
-      .select('id, name, pin, pin_hash')
+      .select('id, name, pin_hash')
       .eq('id', driverId)
       .single()
 
@@ -71,15 +55,15 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Verify PIN against pin_hash first, then fall back to legacy pin field
-    let valid = false
-    if (driver.pin_hash) {
-      valid = await verifyPin(pin, driver.pin_hash)
+    // Require pin_hash — plaintext PIN is no longer accepted
+    if (!driver.pin_hash) {
+      return NextResponse.json(
+        { error: 'PIN not set for this driver. Contact admin.' },
+        { status: 401 }
+      )
     }
-    // Fallback to legacy plaintext pin (remove after migration)
-    if (!valid && driver.pin) {
-      valid = driver.pin === pin
-    }
+
+    const valid = await verifyPin(pin, driver.pin_hash)
 
     if (!valid) {
       return NextResponse.json(

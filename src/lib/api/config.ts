@@ -37,14 +37,8 @@ export async function getCustomerPrice(customerName: string, skipSize?: string, 
     .from('custom_pricing')
     .select('net_price')
 
-  // Phase 9: use customer_id FK when available, fallback to name ilike
-  if (customerId) {
-    // Note: custom_pricing should add customer_id column in future migration
-    // For now, fall through to name-based lookup
-    query = query.ilike('customer_name', customerName.trim())
-  } else {
-    query = query.ilike('customer_name', customerName.trim())
-  }
+  // Always look up by customer_name (custom_pricing uses name column; customer_id FK to be added in future migration)
+  query = query.eq('customer_name', customerName.trim())
 
   if (skipSize) query = query.eq('skip_size', skipSize)
   if (wasteType) query = query.eq('waste_type', wasteType)

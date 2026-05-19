@@ -47,8 +47,8 @@ export async function clockInOut(driverName: string, pin: string, action: 'IN' |
 
   if (action === 'IN') {
     const { data: shift } = await supabase.from('shifts').insert({
-      employee: driverName,
-      date: new Date().toISOString().split('T')[0],
+      employee: driverName ?? '',
+      date: new Date().toISOString().split('T')[0]!,
       role_or_lorry: lorryReg || 'Driver',
       clock_in: new Date().toISOString(),
     }).select('id').single()

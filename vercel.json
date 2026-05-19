@@ -3,9 +3,6 @@
   "buildCommand": "next build",
   "devCommand": "next dev",
   "installCommand": "npm install",
-  "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "https://iuodjkeygsqthlpfjkwj.supabase.co"
-  },
   "crons": [
     {
       "path": "/api/cron/verizon-sync",
@@ -18,10 +15,6 @@
     {
       "path": "/api/cron/collection-reminders",
       "schedule": "0 17 * * *"
-    },
-    {
-      "path": "/api/cron/qb-sync",
-      "schedule": "0 6 * * *"
     }
   ]
 }

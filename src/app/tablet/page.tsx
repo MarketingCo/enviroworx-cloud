@@ -86,7 +86,7 @@ function TabletApp() {
   }
 
   async function loadTodayShifts() {
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toISOString().split('T')[0]!
     const { data } = await supabase
       .from('shifts')
       .select('*')

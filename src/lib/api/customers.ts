@@ -27,25 +27,17 @@ export async function addNewCustomer(form: { name: string; phone: string; email?
 
 export async function getCustomerTimeline(customerName: string, customerId?: string) {
   const config = DEFAULT_CONFIG
-  const nameLower = customerName.toLowerCase()
 
-  // Use customer_id FK join when available (Phase 9 migration), fallback to ilike on name
+  // Always use customer_id FK join (Phase 9 migration complete)
   const ordersQuery = supabase.from('orders').select('*')
     .eq('status', 'Completed')
+    .eq('customer_id', customerId ?? '')
     .order('date', { ascending: false })
     .limit(50)
   const cashLogQuery = supabase.from('cash_log').select('*')
+    .eq('customer_id', customerId ?? '')
     .order('logged_at', { ascending: false })
     .limit(50)
-
-  if (customerId) {
-    ordersQuery.eq('customer_id', customerId)
-    cashLogQuery.eq('customer_id', customerId)
-  } else {
-    // Fallback: use ilike on customer_name (legacy mode during transition)
-    ordersQuery.ilike('customer_name', nameLower)
-    cashLogQuery.ilike('customer_name', nameLower)
-  }
 
   const [{ data: orders }, { data: cashLogs }] = await Promise.all([
     ordersQuery,

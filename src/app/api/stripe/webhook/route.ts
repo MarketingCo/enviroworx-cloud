@@ -58,14 +58,8 @@ export async function POST(req: NextRequest) {
         .eq('paid', false)
         .eq('payment_method', 'Invoice')
     } else if (customerName) {
-      // Fallback: log warning but still use ilike (for legacy events without customer_id in metadata)
-      console.warn(`Stripe webhook: customer_id not in metadata for session ${session.id}, falling back to customer_name`)
-      await supabaseAdmin.from('orders')
-        .update({ paid: true })
-        .ilike('customer_name', customerName)
-        .eq('status', 'Completed')
-        .eq('paid', false)
-        .eq('payment_method', 'Invoice')
+      // No customer_id in metadata — log warning, do NOT fall back to name-based update (names collide)
+      console.warn(`Stripe webhook: customer_id not in metadata for session ${session.id}; cannot mark orders paid. Update metadata.`)
     }
 
     // Log the payment

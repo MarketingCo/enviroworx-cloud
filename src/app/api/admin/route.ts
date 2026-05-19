@@ -75,12 +75,8 @@ export async function POST(request: NextRequest) {
           .select('id')
           .ilike('comments', '%[DEMURRAGE]%')
           .gte('logged_at', recentCutoff.toISOString())
-        // Phase 9: use customer_id FK when available
-        if (skip.customer_id) {
-          existingQuery.eq('customer_id', skip.customer_id)
-        } else {
-          existingQuery.ilike('customer_name', skip.customer_name ?? '')
-        }
+        // Always use customer_id FK (Phase 9 migration complete)
+        existingQuery.eq('customer_id', skip.customer_id ?? '')
         const { data: existing } = await existingQuery.limit(1)
 
         if (existing?.length) continue

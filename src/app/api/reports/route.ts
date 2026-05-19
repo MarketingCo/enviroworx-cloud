@@ -40,7 +40,7 @@ export async function GET(request: Request) {
         r.lorry_reg,
         r.address,
         r.waste_type,
-        r.direction === 'Off-site' ? 'OUTBOUND' : 'INBOUND',
+        "N/A",
         Math.abs(r.net_weight || 0),
       ])
       break

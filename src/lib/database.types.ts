@@ -31,9 +31,9 @@ export type Database = {
         Relationships: []
       }
       cash_log: {
-        Row: { address: string | null; amount_paid: number | null; comments: string | null; cost_gross: number | null; cost_net: number | null; created_at: string | null; customer_name: string; gross_weight: number | null; id: string; logged_at: string | null; net_weight: number | null; payment_method: Database["public"]["Enums"]["payment_method"] | null; skip_size: string | null; ticket_number: string | null; tyl_ref: string | null; waste_type: string | null }
-        Insert: { address?: string | null; amount_paid?: number | null; comments?: string | null; cost_gross?: number | null; cost_net?: number | null; created_at?: string | null; customer_name: string; gross_weight?: number | null; id?: string; logged_at?: string | null; net_weight?: number | null; payment_method?: Database["public"]["Enums"]["payment_method"] | null; skip_size?: string | null; ticket_number?: string | null; tyl_ref?: string | null; waste_type?: string | null }
-        Update: { address?: string | null; amount_paid?: number | null; comments?: string | null; cost_gross?: number | null; cost_net?: number | null; created_at?: string | null; customer_name?: string; gross_weight?: number | null; id?: string; logged_at?: string | null; net_weight?: number | null; payment_method?: Database["public"]["Enums"]["payment_method"] | null; skip_size?: string | null; ticket_number?: string | null; tyl_ref?: string | null; waste_type?: string | null }
+        Row: { address: string | null; amount_paid: number | null; comments: string | null; cost_gross: number | null; cost_net: number | null; created_at: string | null; customer_id: string | null; customer_name: string; gross_weight: number | null; id: string; logged_at: string | null; net_weight: number | null; payment_method: Database["public"]["Enums"]["payment_method"] | null; skip_size: string | null; ticket_number: string | null; tyl_ref: string | null; waste_type: string | null }
+        Insert: { address?: string | null; amount_paid?: number | null; comments?: string | null; cost_gross?: number | null; cost_net?: number | null; created_at?: string | null; customer_id?: string | null; customer_name: string; gross_weight?: number | null; id?: string; logged_at?: string | null; net_weight?: number | null; payment_method?: Database["public"]["Enums"]["payment_method"] | null; skip_size?: string | null; ticket_number?: string | null; tyl_ref?: string | null; waste_type?: string | null }
+        Update: { address?: string | null; amount_paid?: number | null; comments?: string | null; cost_gross?: number | null; cost_net?: number | null; created_at?: string | null; customer_id?: string | null; customer_name?: string; gross_weight?: number | null; id?: string; logged_at?: string | null; net_weight?: number | null; payment_method?: Database["public"]["Enums"]["payment_method"] | null; skip_size?: string | null; ticket_number?: string | null; tyl_ref?: string | null; waste_type?: string | null }
         Relationships: []
       }
       config: {
@@ -49,10 +49,10 @@ export type Database = {
         Relationships: []
       }
       customers: {
-        Row: { account_balance: number | null; billing_address: string | null; comments: string | null; created_at: string | null; email: string | null; full_name: string | null; id: string; invoice_type: string | null; name: string; phone: string | null; portal_pin: string | null; shipping_address: string | null; updated_at: string | null }
-        Insert: { account_balance?: number | null; billing_address?: string | null; comments?: string | null; created_at?: string | null; email?: string | null; full_name?: string | null; id?: string; invoice_type?: string | null; name: string; phone?: string | null; portal_pin?: string | null; shipping_address?: string | null; updated_at?: string | null }
-        Update: { account_balance?: number | null; billing_address?: string | null; comments?: string | null; created_at?: string | null; email?: string | null; full_name?: string | null; id?: string; invoice_type?: string | null; name?: string; phone?: string | null; portal_pin?: string | null; shipping_address?: string | null; updated_at?: string | null }
-        Relationships: []
+        Row: { account_balance: number | null; auth_user_id: string | null; billing_address: string | null; comments: string | null; created_at: string | null; email: string | null; full_name: string | null; id: string; invoice_type: string | null; name: string; phone: string | null; pin_hash: string | null; portal_pin: string | null; shipping_address: string | null; updated_at: string | null }
+        Insert: { account_balance?: number | null; auth_user_id?: string | null; billing_address?: string | null; comments?: string | null; created_at?: string | null; email?: string | null; full_name?: string | null; id?: string; invoice_type?: string | null; name: string; phone?: string | null; pin_hash?: string | null; portal_pin?: string | null; shipping_address?: string | null; updated_at?: string | null }
+        Update: { account_balance?: number | null; auth_user_id?: string | null; billing_address?: string | null; comments?: string | null; created_at?: string | null; email?: string | null; full_name?: string | null; id?: string; invoice_type?: string | null; name?: string; phone?: string | null; pin_hash?: string | null; portal_pin?: string | null; shipping_address?: string | null; updated_at?: string | null }
+        Relationships: [{ foreignKeyName: "customers_auth_user_id_fkey"; columns: ["auth_user_id"]; isOneToOne: false; referencedRelation: "users"; referencedColumns: ["id"] }]
       }
       driver_hours: {
         Row: { break_minutes: number | null; clock_in: string | null; clock_out: string | null; created_at: string | null; date: string | null; driver_id: string | null; driver_name: string | null; hours_worked: number | null; id: string; vehicle_id: string | null; vehicle_reg: string | null }
@@ -61,10 +61,10 @@ export type Database = {
         Relationships: []
       }
       drivers: {
-        Row: { created_at: string | null; id: string; name: string; pay_rate: number | null; pin: string | null; status: string | null; updated_at: string | null }
-        Insert: { created_at?: string | null; id?: string; name: string; pay_rate?: number | null; pin?: string | null; status?: string | null; updated_at?: string | null }
-        Update: { created_at?: string | null; id?: string; name?: string; pay_rate?: number | null; pin?: string | null; status?: string | null; updated_at?: string | null }
-        Relationships: []
+        Row: { auth_user_id: string | null; created_at: string | null; id: string; name: string; pay_rate: number | null; pin: string | null; pin_hash: string | null; role: string | null; status: string | null; updated_at: string | null }
+        Insert: { auth_user_id?: string | null; created_at?: string | null; id?: string; name: string; pay_rate?: number | null; pin?: string | null; pin_hash?: string | null; role?: string | null; status?: string | null; updated_at?: string | null }
+        Update: { auth_user_id?: string | null; created_at?: string | null; id?: string; name?: string; pay_rate?: number | null; pin?: string | null; pin_hash?: string | null; role?: string | null; status?: string | null; updated_at?: string | null }
+        Relationships: [{ foreignKeyName: "drivers_auth_user_id_fkey"; columns: ["auth_user_id"]; isOneToOne: false; referencedRelation: "users"; referencedColumns: ["id"] }]
       }
       fleet_logs: {
         Row: { created_at: string | null; description: string | null; id: string; issue_type: string; lorry_reg: string; photo_url: string | null; reported_by: string | null; status: string | null; timestamp: string | null }
@@ -112,6 +112,12 @@ export type Database = {
         Row: { created_at: string | null; date_applied: string | null; date_issued: string | null; expiry_date: string; id: string; location: string; permit_number: string | null; skip_id: string; status: string | null }
         Insert: { created_at?: string | null; date_applied?: string | null; date_issued?: string | null; expiry_date: string; id?: string; location: string; permit_number?: string | null; skip_id: string; status?: string | null }
         Update: { created_at?: string | null; date_applied?: string | null; date_issued?: string | null; expiry_date?: string; id?: string; location?: string; permit_number?: string | null; skip_id?: string; status?: string | null }
+        Relationships: []
+      }
+      processed_stripe_events: {
+        Row: { id: string; processed_at: string | null; type: string }
+        Insert: { id: string; processed_at?: string | null; type: string }
+        Update: { id?: string; processed_at?: string | null; type?: string }
         Relationships: []
       }
       shifts: {
@@ -181,10 +187,10 @@ export type Database = {
         Relationships: []
       }
       yard_staff: {
-        Row: { created_at: string | null; id: string; name: string; pay_rate: number | null; pin: string }
-        Insert: { created_at?: string | null; id?: string; name: string; pay_rate?: number | null; pin: string }
-        Update: { created_at?: string | null; id?: string; name?: string; pay_rate?: number | null; pin?: string }
-        Relationships: []
+        Row: { auth_user_id: string | null; created_at: string | null; id: string; name: string; pay_rate: number | null; pin: string | null; pin_hash: string | null; role: string | null }
+        Insert: { auth_user_id?: string | null; created_at?: string | null; id?: string; name: string; pay_rate?: number | null; pin?: string | null; pin_hash?: string | null; role?: string | null }
+        Update: { auth_user_id?: string | null; created_at?: string | null; id?: string; name?: string; pay_rate?: number | null; pin?: string | null; pin_hash?: string | null; role?: string | null }
+        Relationships: [{ foreignKeyName: "yard_staff_auth_user_id_fkey"; columns: ["auth_user_id"]; isOneToOne: false; referencedRelation: "users"; referencedColumns: ["id"] }]
       }
     }
     Views: {

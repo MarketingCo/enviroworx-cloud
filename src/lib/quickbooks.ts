@@ -61,6 +61,7 @@ function getItemRef(skipSize: string, jobType?: string): { name: string; value: 
  */
 export async function refreshQBToken(): Promise<string> {
   const config = await getQBConfig() as QBConfig
+  if (!config.clientId || !config.clientSecret) throw new Error('QB not configured')
   const { clientId, clientSecret, refreshToken } = config
 
   if (!refreshToken) {
@@ -110,6 +111,7 @@ export async function refreshQBToken(): Promise<string> {
  */
 export async function getValidAccessToken(): Promise<string> {
   const config = await getQBConfig() as QBConfig
+  if (!config.clientId || !config.clientSecret) throw new Error('QB not configured')
 
   // If token is expired or about to expire (within 5 minutes), refresh it
   const expiresAt = config.expiresAt || 0
@@ -132,7 +134,11 @@ export async function createDraftInvoice(order: {
 }) {
   const accessToken = await getValidAccessToken()
   const config = await getQBConfig() as QBConfig
-  const { realmId, clientId, clientSecret, refreshToken } = config
+  if (!config.clientId || !config.clientSecret) throw new Error('QB not configured')
+  const realmId = config.realmId ?? ''
+  const clientId = config.clientId ?? ''
+  const clientSecret = config.clientSecret ?? ''
+  const refreshToken = config.refreshToken
 
   if (!accessToken || !realmId) {
     throw new Error('QuickBooks not connected. Please connect in settings.')
@@ -157,10 +163,12 @@ export async function createDraftInvoice(order: {
 
   return new Promise((resolve, reject) => {
     // 1. Find or Create Customer
-    qbo.findCustomers({ DisplayName: order.customer_name }, (err: Error | null, customers: Record<string, unknown> | null) => {
+    qbo.findCustomers({ DisplayName: order.customer_name }, (err: unknown, customers: unknown) => {
       if (err) return reject(err)
 
-      let customerId = customers?.QueryResponse?.Customer?.[0]?.Id
+      const custs = customers as Record<string, unknown>
+      let customerId = (custs?.QueryResponse as Record<string, unknown>)?.Customer as unknown as Array<{Id?: string}>
+      let customerIdStr = customerId?.[0]?.Id
 
       const proceedWithInvoice = (cId: string) => {
         const invoiceData = {
@@ -181,19 +189,19 @@ export async function createDraftInvoice(order: {
           TxnDate: order.date
         }
 
-        qbo.createInvoice(invoiceData, (invErr: Error | null, invoice: Record<string, unknown> | null) => {
+        qbo.createInvoice(invoiceData, (invErr: unknown, invoice: unknown) => {
           if (invErr) return reject(invErr)
           resolve(invoice)
         })
       }
 
       if (!customerId) {
-        qbo.createCustomer({ DisplayName: order.customer_name }, (cErr: Error | null, customer: Record<string, unknown> | null) => {
+        qbo.createCustomer({ DisplayName: order.customer_name }, (cErr: unknown, customer: unknown) => {
           if (cErr) return reject(cErr)
-          proceedWithInvoice(customer!.Id as string)
+          proceedWithInvoice((customer as Record<string, unknown>)?.Id as string ?? '')
         })
       } else {
-        proceedWithInvoice(customerId)
+        proceedWithInvoice(customerIdStr ?? '')
       }
     })
   })

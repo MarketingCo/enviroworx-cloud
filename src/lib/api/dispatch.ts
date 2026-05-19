@@ -76,7 +76,7 @@ export async function autoAssignJobs(targetDate: string) {
 
   for (const job of unassigned) {
     for (const driver of drivers) {
-      const currentLoad = [...driverPayloads[driver.name]]
+      const currentLoad = [...(driverPayloads[driver.name] ?? [])]
       if (job.job_type !== 'Collection') currentLoad.push(job.skip_size)
       currentLoad.sort((a, b) => parseInt(a) - parseInt(b))
       const testCombo = currentLoad.join('|')
@@ -139,12 +139,8 @@ export async function getDriverJobs(driverName: string) {
         .from('inventory')
         .select('skip_id')
         .in('status', ['Delivered', 'In Use'])
-      // Use customer_id FK when available (Phase 9), fallback to ilike on name
-      if (job.customer_id) {
-        skipQuery.eq('customer_id', job.customer_id)
-      } else {
-        skipQuery.ilike('customer_name', job.customer_name)
-      }
+      // Always use customer_id FK (Phase 9 migration complete)
+      skipQuery.eq('customer_id', job.customer_id ?? '')
       const { data: skip } = await skipQuery.limit(1).single()
       hint = skip?.skip_id || ''
     }

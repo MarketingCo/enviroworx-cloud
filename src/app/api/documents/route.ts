@@ -97,7 +97,7 @@ async function generateWTN(params: URLSearchParams) {
     <div class="field"><div class="field-label">Customer / Transferor</div><div class="field-value">${wl.customer_name}</div></div>
     <div class="field"><div class="field-label">Carrier Vehicle</div><div class="field-value">${wl.lorry_reg}</div></div>
     <div class="field"><div class="field-label">Collection Address</div><div class="field-value">${wl.address || 'N/A'}</div></div>
-    <div class="field"><div class="field-label">Direction</div><div class="field-value">${wl.direction || 'On-site'}</div></div>
+    <div class="field"><div class="field-label">Direction</div><div class="field-value">${(wl as any)?.direction ?? "N/A"}</div></div>
     <div class="field"><div class="field-label">Waste Description</div><div class="field-value">${wl.waste_type}</div></div>
     <div class="field"><div class="field-label">EWC Code</div><div class="field-value">${ewcCode}</div></div>
     <div class="field"><div class="field-label">Skip Size</div><div class="field-value">${wl.skip_size || 'N/A'}</div></div>
@@ -275,15 +275,10 @@ async function generateInvoice(params: URLSearchParams) {
     const { data } = await supabaseAdmin.from('orders').select('*').eq('id', orderId).single()
     if (!data) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     orders = [data]
-    // Get customer via customer_id FK (Phase 9 migration)
+    // Always get customer via customer_id FK (Phase 9 migration complete)
     if (data.customer_id) {
       const { data: cust } = await supabaseAdmin.from('customers')
         .select('*').eq('id', data.customer_id).single()
-      customer = cust
-    } else {
-      // Fallback: legacy name match (remove after backfill)
-      const { data: cust } = await supabaseAdmin.from('customers')
-        .select('*').ilike('name', data.customer_name).single()
       customer = cust
     }
   } else {

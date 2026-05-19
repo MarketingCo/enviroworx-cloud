@@ -9,20 +9,8 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { verifyPin } from '@/lib/auth'
 import { rateLimit, getClientIdentifier } from '@/lib/rate-limit'
-
-// Simple PIN verification using timing-safe comparison
-// In production, use bcrypt.compare against a hashed PIN field
-async function verifyPin(plainPin: string, pinHash: string | null): Promise<boolean> {
-  if (!pinHash) return false
-  if (pinHash.startsWith('$2')) {
-    // bcrypt hash - in production install bcrypt and use it:
-    // return await bcrypt.compare(plainPin, pinHash)
-    return false
-  }
-  // Legacy plaintext comparison (remove after migration)
-  return pinHash === plainPin
-}
 
 // Create a simple signed token
 function createSessionToken(personId: string, personName: string, role: string): string {
@@ -65,63 +53,47 @@ export async function POST(req: NextRequest) {
     let role = mode
 
     if (mode === 'driver') {
-      // Look up driver by ID
       const { data: driver, error } = await supabaseAdmin
         .from('drivers')
-        .select('id, name, pin, pin_hash')
+        .select('id, name, pin_hash')
         .eq('id', personId)
         .single()
 
       if (error || !driver) {
-        return NextResponse.json(
-          { error: 'Driver not found' },
-          { status: 401 }
-        )
+        return NextResponse.json({ error: 'Driver not found' }, { status: 401 })
       }
 
-      if (driver.pin_hash) {
-        pinValid = await verifyPin(pin, driver.pin_hash)
-      }
-      if (!pinValid && driver.pin) {
-        pinValid = driver.pin === pin
+      if (!driver.pin_hash) {
+        return NextResponse.json({ error: 'PIN not set. Contact admin.' }, { status: 401 })
       }
 
+      pinValid = await verifyPin(pin, driver.pin_hash)
       person = { id: driver.id, name: driver.name }
       role = 'driver'
     } else {
-      // Look up yard staff by ID
       const { data: staff, error } = await supabaseAdmin
         .from('yard_staff')
-        .select('id, name, pin, pin_hash')
+        .select('id, name, pin_hash')
         .eq('id', personId)
         .single()
 
       if (error || !staff) {
-        return NextResponse.json(
-          { error: 'Staff member not found' },
-          { status: 401 }
-        )
+        return NextResponse.json({ error: 'Staff member not found' }, { status: 401 })
       }
 
-      if (staff.pin_hash) {
-        pinValid = await verifyPin(pin, staff.pin_hash)
-      }
-      if (!pinValid && staff.pin) {
-        pinValid = staff.pin === pin
+      if (!staff.pin_hash) {
+        return NextResponse.json({ error: 'PIN not set. Contact admin.' }, { status: 401 })
       }
 
+      pinValid = await verifyPin(pin, staff.pin_hash)
       person = { id: staff.id, name: staff.name }
       role = 'yard'
     }
 
     if (!pinValid) {
-      return NextResponse.json(
-        { error: 'Invalid PIN' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 })
     }
 
-    // Create a session token
     const token = createSessionToken(person!.id, person!.name, role)
 
     return NextResponse.json({

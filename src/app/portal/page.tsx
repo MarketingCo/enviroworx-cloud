@@ -143,7 +143,7 @@ function CustomerPortal() {
     setLoading(false)
   }
 
-  async function loadCustomerData(name: string, customerId?: string) {
+  async function loadCustomerData(_name: string, customerId?: string) {
     const ordersQuery = supabase.from('orders').select('*')
       .order('date', { ascending: false })
       .limit(100)
@@ -151,14 +151,15 @@ function CustomerPortal() {
       .order('logged_at', { ascending: false })
       .limit(100)
 
-    // Phase 9: use customer_id FK join when available
+    // Always use customer_id FK join (Phase 9 migration complete)
     if (customerId) {
       ordersQuery.eq('customer_id', customerId)
       cashLogQuery.eq('customer_id', customerId)
     } else {
-      // Fallback: legacy name-based lookup (ilike)
-      ordersQuery.ilike('customer_name', name)
-      cashLogQuery.ilike('customer_name', name)
+      // No customerId provided — return empty to avoid unfiltered data leak
+      setOrders([])
+      setCashLogs([])
+      return
     }
 
     const [{ data: ords }, { data: cls }] = await Promise.all([
@@ -238,7 +239,7 @@ function CustomerPortal() {
       setCollDate('')
       setCollNotes('')
       setBookSubmitted(true)
-      await loadCustomerData(customer!.name)
+      await loadCustomerData(customer!.name, customer!.id)
     }
     setLoading(false)
   }
@@ -312,7 +313,7 @@ function CustomerPortal() {
       window.history.replaceState({}, '', window.location.pathname)
       // Refresh invoice list
       if (customer) {
-        loadCustomerData(customer.name)
+        loadCustomerData(customer.name, customer.id)
       }
     } else if (payment === 'cancelled') {
       toast.error('Payment was cancelled.')

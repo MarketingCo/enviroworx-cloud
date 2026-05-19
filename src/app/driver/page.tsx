@@ -636,7 +636,7 @@ function DriverJobCard({ job, index, total, config, onComplete, onAbort }: Drive
           type="text"
           value={skipId}
           onChange={e => setSkipId(e.target.value)}
-          placeholder={job.hint ? `Skip ID (hint: ${job.hint})` : 'Enter Skip ID'}
+          placeholder={job.comments ? `Skip ID (comments: ${job.comments})` : 'Enter Skip ID'}
           className="w-full p-4 rounded-xl bg-slate-900 border-2 border-slate-600 text-lg font-bold focus:border-emerald-500 focus:outline-none transition"
           autoCapitalize="characters"
         />
