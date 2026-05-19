@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { getDriverJobs, completeJob, clockInOut } from '@/lib/api'
+import { getDriverJobs } from '@/lib/api'
+import { completeJobAction, clockInOutAction } from '@/app/actions/operations'
 import { abortJobWithNotification } from '@/app/actions/notifications'
 import { DEFAULT_CONFIG } from '@/lib/config'
 import toast, { Toaster } from 'react-hot-toast'
@@ -73,7 +74,7 @@ export default function DriverApp() {
 
   async function loadInitialData() {
     const [{ data: drvs }, { data: lors }] = await Promise.all([
-      supabase.from('drivers').select('*').order('name'),
+      supabase.from('drivers_public' as 'drivers').select('id, name, status, phone').order('name'),
       supabase.from('lorries').select('*').order('registration'),
     ])
     setDrivers(drvs ?? [])
@@ -106,7 +107,17 @@ export default function DriverApp() {
     if (!selectedDriver || !selectedLorry || !pin) return toast.error('Select name, lorry, and enter PIN')
     setLoading(true)
     setLoaderText('Clocking In...')
-    const result = await clockInOut(selectedDriver, pin, 'IN', selectedLorry)
+    const authRes = await fetch('/api/auth/driver', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: selectedDriver, pin }),
+    })
+    if (!authRes.ok) {
+      toast.error('Invalid PIN')
+      setLoading(false)
+      return
+    }
+    const result = await clockInOutAction(selectedDriver, pin, 'IN', selectedLorry)
     if (result.success) {
       const newState: DriverState = { driver: selectedDriver, lorry: selectedLorry, shiftId: result.shiftId ?? null, pin, onBreak: false, breakStart: null }
       setState(newState)
@@ -123,7 +134,7 @@ export default function DriverApp() {
     if (!confirm('Clock out and end your shift?')) return
     setLoading(true)
     setLoaderText('Clocking Out...')
-    await clockInOut(state.driver!, state.pin!, 'OUT', state.lorry!)
+    await clockInOutAction(state.driver!, state.pin!, 'OUT', state.lorry!)
     localStorage.removeItem('env_driver_shift')
     window.location.reload()
   }
@@ -142,7 +153,7 @@ export default function DriverApp() {
     setLoading(true)
     setLoaderText('Syncing...')
     try {
-      const result = await completeJob({
+      const result = await completeJobAction({
         orderId: job.id,
         skipId,
         jobType: job.job_type,

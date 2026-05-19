@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { clockInOut } from '@/lib/api'
+import { clockInOutAction } from '@/app/actions/operations'
 import toast, { Toaster } from 'react-hot-toast'
 
 /**
@@ -57,8 +57,8 @@ export default function TabletApp() {
 
   async function loadData() {
     const [{ data: drvs }, { data: ys }, { data: lors }] = await Promise.all([
-      supabase.from('drivers').select('*').order('name'),
-      supabase.from('yard_staff').select('*').order('name'),
+      supabase.from('drivers_public' as 'drivers').select('id, name, status').order('name'),
+      supabase.from('yard_staff_public' as 'yard_staff').select('id, name').order('name'),
       supabase.from('lorries').select('*').order('registration'),
     ])
     setDrivers(drvs ?? [])
@@ -90,7 +90,17 @@ export default function TabletApp() {
     const action = clockedIn ? 'OUT' : 'IN'
 
     try {
-      const result = await clockInOut(selectedName, pin, action, selectedLorry || undefined)
+      const authRes = await fetch('/api/auth/office', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: selectedName, pin }),
+      })
+      if (!authRes.ok) {
+        toast.error('Invalid PIN')
+        setLoading(false)
+        return
+      }
+      const result = await clockInOutAction(selectedName, pin, action, selectedLorry || undefined)
       if (result.success) {
         toast.success(result.message, { duration: 4000 })
         setPin('')

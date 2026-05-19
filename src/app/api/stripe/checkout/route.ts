@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const { owed, unpaidOrderIds } = await computeCustomerOutstanding(customerId, customerName)
+    const { owed, unpaidOrderIds, unpaidCashLogIds } = await computeCustomerOutstanding(customerId, customerName)
 
     if (owed <= 0) {
       return NextResponse.json({ error: 'No outstanding balance' }, { status: 400 })
@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
         customer_id: customerId,
         customer_name: customerName,
         order_ids: JSON.stringify(idsToPay),
+        cash_log_ids: JSON.stringify(unpaidCashLogIds),
       },
       success_url: `${origin}/portal?payment=success`,
       cancel_url: `${origin}/portal?payment=cancelled`,

@@ -3,8 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast, { Toaster } from 'react-hot-toast'
-import { officeCookieName } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
 
 // Simple staff auth — matches against drivers/yard_staff tables with PIN
 // For production, swap to Supabase Auth with email+password
@@ -23,41 +21,25 @@ export default function OfficeLogin() {
     }
     setLoading(true)
 
-    // Check drivers table first
-    const { data: driver } = await supabase
-      .from('drivers')
-      .select('id, name')
-      .ilike('name', name.trim())
-      .eq('pin', pin.trim())
-      .single()
+    const res = await fetch('/api/auth/office', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim(), pin: pin.trim() }),
+    })
+    const data = await res.json()
 
-    // Then yard staff
-    const { data: yardStaff } = !driver
-      ? await supabase
-          .from('yard_staff')
-          .select('id, name')
-          .ilike('name', name.trim())
-          .eq('pin', pin.trim())
-          .single()
-      : { data: null }
-
-    const user = driver || yardStaff
-
-    if (!user) {
-      toast.error('Invalid credentials')
+    if (!res.ok) {
+      toast.error(data.error || 'Invalid credentials')
       setLoading(false)
       return
     }
 
-    const session = {
-      name: user.name,
-      id: user.id,
-      role: driver ? 'driver' : 'yard',
+    sessionStorage.setItem('office_session', JSON.stringify({
+      name: data.user.name,
+      id: data.user.id,
+      role: data.user.role,
       loginAt: Date.now(),
-    }
-    sessionStorage.setItem('office_session', JSON.stringify(session))
-    // Cookie for middleware (24h); sessionStorage for client UI state
-    document.cookie = `${officeCookieName}=1; path=/; max-age=86400; SameSite=Lax`
+    }))
 
     router.push('/office')
   }

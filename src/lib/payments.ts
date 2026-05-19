@@ -10,6 +10,7 @@ type OrderRow = {
 }
 
 type CashLogRow = {
+  id: string
   payment_method: string | null
   amount_paid: number | null
   cost_gross: number | null
@@ -24,12 +25,13 @@ export async function computeCustomerOutstanding(customerId: string, customerNam
       .eq('customer_id', customerId),
     supabaseAdmin
       .from('cash_log')
-      .select('payment_method, amount_paid, cost_gross')
+      .select('id, payment_method, amount_paid, cost_gross')
       .ilike('customer_name', customerName),
   ])
 
   let owed = 0
   const unpaidOrderIds: string[] = []
+  const unpaidCashLogIds: string[] = []
 
   for (const o of (orders ?? []) as OrderRow[]) {
     if (o.status === 'Completed' && !o.paid && o.payment_method === 'Invoice') {
@@ -42,8 +44,13 @@ export async function computeCustomerOutstanding(customerId: string, customerNam
   for (const cl of (cashLogs ?? []) as CashLogRow[]) {
     if (cl.payment_method === 'Invoice' && (cl.amount_paid || 0) < (cl.cost_gross || 0)) {
       owed += (cl.cost_gross || 0) - (cl.amount_paid || 0)
+      unpaidCashLogIds.push(cl.id)
     }
   }
 
-  return { owed: Math.round(owed * 100) / 100, unpaidOrderIds }
+  return {
+    owed: Math.round(owed * 100) / 100,
+    unpaidOrderIds,
+    unpaidCashLogIds,
+  }
 }

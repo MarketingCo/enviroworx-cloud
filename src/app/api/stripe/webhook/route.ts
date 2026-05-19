@@ -27,13 +27,30 @@ export async function POST(req: NextRequest) {
     const amountPaid = (session.amount_total || 0) / 100
     const customerName = meta.customer_name || ''
     const orderIds: string[] = meta.order_ids ? JSON.parse(meta.order_ids) : []
+    const cashLogIds: string[] = meta.cash_log_ids ? JSON.parse(meta.cash_log_ids) : []
 
     if (orderIds.length > 0) {
       await supabaseAdmin.from('orders')
         .update({ paid: true })
         .in('id', orderIds)
-    } else {
-      console.warn('Stripe webhook: checkout completed without order_ids in metadata', {
+    }
+
+    for (const cashLogId of cashLogIds) {
+      const { data: row } = await supabaseAdmin
+        .from('cash_log')
+        .select('cost_gross')
+        .eq('id', cashLogId)
+        .single()
+      if (row?.cost_gross != null) {
+        await supabaseAdmin
+          .from('cash_log')
+          .update({ amount_paid: row.cost_gross })
+          .eq('id', cashLogId)
+      }
+    }
+
+    if (orderIds.length === 0 && cashLogIds.length === 0) {
+      console.warn('Stripe webhook: checkout completed without payment targets in metadata', {
         customerName,
         sessionId: session.id,
       })

@@ -80,24 +80,32 @@ export default function CustomerPortal() {
     if (!loginName.trim() || !loginPin.trim()) return toast.error('Enter your name and PIN')
     setLoading(true)
 
-    const { data, error } = await supabase
-      .from('customers')
-      .select('*')
-      .ilike('name', loginName.trim())
-      .eq('portal_pin', loginPin.trim())
-      .single()
+    const res = await fetch('/api/auth/portal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: loginName.trim(), pin: loginPin.trim() }),
+    })
+    const auth = await res.json()
 
-    if (error || !data) {
-      toast.error('Invalid name or PIN. Contact the office if you need access.')
+    if (!res.ok) {
+      toast.error(auth.error || 'Invalid name or PIN. Contact the office if you need access.')
       setLoading(false)
       return
     }
+
+    const { loadPortalCustomer, loadPortalOrders, loadPortalCashLogs } = await import('@/app/actions/portal')
+    const data = await loadPortalCustomer(auth.customer.id)
 
     setCustomer(data as Customer)
     setEditPhone(data.phone || '')
     setEditEmail(data.email || '')
     setEditAddress(data.shipping_address || '')
-    await loadCustomerData(data.name)
+    const [orderRows, cashRows] = await Promise.all([
+      loadPortalOrders(data.name),
+      loadPortalCashLogs(data.name),
+    ])
+    setOrders(orderRows as OrderRow[])
+    setCashLogs(cashRows as CashLogRow[])
     setScreen('dashboard')
     setLoading(false)
   }
@@ -195,17 +203,17 @@ export default function CustomerPortal() {
     if (!customer) return
     setLoading(true)
 
-    const { error } = await supabase.from('customers').update({
-      phone: editPhone,
-      email: editEmail,
-      shipping_address: editAddress,
-    }).eq('id', customer.id)
-
-    if (error) {
-      toast.error('Failed to update details')
-    } else {
+    try {
+      const { updatePortalContact } = await import('@/app/actions/portal')
+      await updatePortalContact(customer.id, {
+        phone: editPhone,
+        email: editEmail,
+        shipping_address: editAddress,
+      })
       toast.success('Details updated!')
       setCustomer({ ...customer, phone: editPhone, email: editEmail, shipping_address: editAddress })
+    } catch {
+      toast.error('Failed to update details')
     }
     setLoading(false)
   }
