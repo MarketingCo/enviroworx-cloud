@@ -32,14 +32,11 @@ export async function POST(req: NextRequest) {
       await supabaseAdmin.from('orders')
         .update({ paid: true })
         .in('id', orderIds)
-    } else if (customerName) {
-      // Mark all unpaid completed invoice orders for this customer
-      await supabaseAdmin.from('orders')
-        .update({ paid: true })
-        .ilike('customer_name', customerName)
-        .eq('status', 'Completed')
-        .eq('paid', false)
-        .eq('payment_method', 'Invoice')
+    } else {
+      console.warn('Stripe webhook: checkout completed without order_ids in metadata', {
+        customerName,
+        sessionId: session.id,
+      })
     }
 
     // Log the payment

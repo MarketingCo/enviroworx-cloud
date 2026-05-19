@@ -1,10 +1,14 @@
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth'
 import { supabaseAdmin, safeActivityLog } from '@/lib/supabase'
 import { sendSms } from '@/lib/sms'
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!verifyCronAuth(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   try {
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)

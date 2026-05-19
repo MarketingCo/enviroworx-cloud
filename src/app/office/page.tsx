@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { officeCookieName } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import {
   getDashboardStats,
@@ -1936,7 +1938,7 @@ function MapTab() {
         marker.bindPopup(`
           <div style="font-family:sans-serif; color:#f8fafc; min-width:160px;">
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:6px; margin-bottom:6px;">
-              <b style="color:#3b82f6; font-size:14px;">${v.reg}</b>
+              <b style="color:#3b82f6; font-size:14px;">${v.registration || v.reg || 'Unknown'}</b>
               <span style="font-size:8px; font-weight:black; padding:2px 4px; border-radius:3px; background:${isIdle ? '#7f1d1d' : (isStale ? '#334155' : '#064e3b')}; color:${isIdle ? '#fecaca' : (isStale ? '#94a3b8' : '#34d399')};">
                 ${isIdle ? 'IDLE ALERT' : (isStale ? 'STALE' : 'LIVE')}
               </span>
@@ -2293,9 +2295,24 @@ function SettingsTab() {
 // ─── Main Office Page ─────────────────────────────────────────────────────────
 
 export default function OfficePage() {
+  const router = useRouter()
   const [tab, setTab] = useState<Tab>('dashboard')
   const [dashData, setDashData] = useState<DashStats | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
+
+  useEffect(() => {
+    const session = sessionStorage.getItem('office_session')
+    const hasCookie = document.cookie.split(';').some((c) => c.trim().startsWith(`${officeCookieName}=1`))
+    if (!session && !hasCookie) {
+      router.replace('/office/login')
+      return
+    }
+    if (session && !hasCookie) {
+      document.cookie = `${officeCookieName}=1; path=/; max-age=86400; SameSite=Lax`
+    }
+    setAuthChecked(true)
+  }, [router])
 
   const loadDash = useCallback(async () => {
     setRefreshing(true)
@@ -2309,6 +2326,7 @@ export default function OfficePage() {
   }, [])
 
   useEffect(() => {
+    if (!authChecked) return
     loadDash()
     const interval = setInterval(loadDash, 120000)
 
@@ -2339,7 +2357,7 @@ export default function OfficePage() {
       .subscribe()
 
     return () => { clearInterval(interval); supabase.removeChannel(ch) }
-  }, [loadDash])
+  }, [loadDash, authChecked])
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
@@ -2355,6 +2373,14 @@ export default function OfficePage() {
   ]
 
   const isConfigMissing = !process.env.NEXT_PUBLIC_SUPABASE_URL
+
+  if (!authChecked) {
+    return (
+      <div className="bg-slate-950 min-h-screen flex items-center justify-center text-slate-400">
+        Loading…
+      </div>
+    )
+  }
 
   return (
     <div className="bg-slate-950 min-h-screen text-white">

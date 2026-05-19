@@ -9,7 +9,7 @@
  * - Supabase: SQL queries run server-side, return ONLY what's needed
  *   → 10-50x faster for dashboard loads
  */
-import { supabase, supabaseAdmin } from './supabase'
+import { supabase } from './supabase'
 import { DEFAULT_CONFIG, type AppConfig } from './config'
 import { logToDrive } from '@/app/actions/drive'
 
@@ -26,10 +26,10 @@ export async function getDashboardStats() {
 
   // Run all queries in parallel
   const [
-    { data: completedToday },
-    { data: completedWeek },
-    { data: futureBookings },
-    { data: tipsToday },
+    { count: completedToday },
+    { count: completedWeek },
+    { count: futureBookings },
+    { count: tipsToday },
     { data: inventorySummary },
     { data: activeTippers },
     { data: unpaidInvoices },
@@ -65,10 +65,10 @@ export async function getDashboardStats() {
 
   return {
     stats: {
-      completedToday: completedToday?.length ?? 0,
-      completedWeek: completedWeek?.length ?? 0,
-      futureBookings: futureBookings?.length ?? 0,
-      tipsToday: tipsToday?.length ?? 0,
+      completedToday: completedToday ?? 0,
+      completedWeek: completedWeek ?? 0,
+      futureBookings: futureBookings ?? 0,
+      tipsToday: tipsToday ?? 0,
       estProfitToday: totalRev - estDisposalCost
     },
     inventorySummary: inventorySummary ?? [],

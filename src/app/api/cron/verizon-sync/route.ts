@@ -1,9 +1,13 @@
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!verifyCronAuth(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   try {
     const appId = process.env.VERIZON_APP_ID;
     const apiKey = process.env.VERIZON_API_KEY;
@@ -67,7 +71,7 @@ export async function GET() {
           heading: heading,
           last_updated: new Date().toISOString()
         })
-        .or(`reg.eq.${reg},verizon_vehicle_number.eq.${reg}`);
+        .or(`registration.eq.${reg},reg.eq.${reg},verizon_vehicle_number.eq.${reg}`);
 
       if (!updateError) {
         telemetryInserts.push({

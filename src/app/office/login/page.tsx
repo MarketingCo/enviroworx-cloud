@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast, { Toaster } from 'react-hot-toast'
+import { officeCookieName } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 
 // Simple staff auth — matches against drivers/yard_staff tables with PIN
@@ -48,13 +49,15 @@ export default function OfficeLogin() {
       return
     }
 
-    // Store session in sessionStorage (clears on tab close)
-    sessionStorage.setItem('office_session', JSON.stringify({
+    const session = {
       name: user.name,
       id: user.id,
       role: driver ? 'driver' : 'yard',
       loginAt: Date.now(),
-    }))
+    }
+    sessionStorage.setItem('office_session', JSON.stringify(session))
+    // Cookie for middleware (24h); sessionStorage for client UI state
+    document.cookie = `${officeCookieName}=1; path=/; max-age=86400; SameSite=Lax`
 
     router.push('/office')
   }

@@ -1,10 +1,14 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyCronAuth } from '@/lib/auth'
 import { supabaseAdmin, safeActivityLog } from '@/lib/supabase'
 import { logToDrive } from '@/app/actions/drive'
 
 export async function GET(req: NextRequest) {
+  if (!verifyCronAuth(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   try {
     const { searchParams } = new URL(req.url)
     const customStart = searchParams.get('start')
