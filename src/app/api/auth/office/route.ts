@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   const token = await createSessionToken({
     sub: user.id,
     name: user.name,
-    role: driver ? 'office' : 'yard',
+    role: driver ? 'driver' : 'yard',
   })
 
   const res = NextResponse.json({

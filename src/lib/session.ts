@@ -1,6 +1,8 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import type { NextRequest } from 'next/server'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { isOfficeGoogleEmailAllowed, officePinAuthEnabled } from '@/lib/office-google'
 
 export type SessionRole = 'office' | 'driver' | 'yard' | 'portal'
 
@@ -81,9 +83,41 @@ export async function getSessionFromRequest(request: Request | NextRequest): Pro
   return verifySessionToken(decodeURIComponent(match[1]))
 }
 
+const OFFICE_ROLES: SessionRole[] = ['office', 'driver', 'yard']
+
+/** Google (allowlisted) or optional PIN session when OFFICE_PIN_AUTH_ENABLED=true */
+export async function resolveOfficeSession(): Promise<AppSession | null> {
+  const supabase = createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (user?.email && isOfficeGoogleEmailAllowed(user.email)) {
+    const meta = user.user_metadata as { full_name?: string } | undefined
+    const name =
+      (typeof meta?.full_name === 'string' && meta.full_name.trim()) ||
+      user.email.split('@')[0] ||
+      'Staff'
+    return {
+      sub: user.id,
+      name,
+      role: 'office',
+    }
+  }
+
+  if (officePinAuthEnabled()) {
+    const session = await getSessionFromCookies()
+    if (session && OFFICE_ROLES.includes(session.role)) {
+      return session
+    }
+  }
+
+  return null
+}
+
 export async function requireOfficeSession(): Promise<AppSession> {
-  const session = await getSessionFromCookies()
-  if (!session || (session.role !== 'office' && session.role !== 'driver' && session.role !== 'yard')) {
+  const session = await resolveOfficeSession()
+  if (!session) {
     throw new Error('Unauthorized')
   }
   return session

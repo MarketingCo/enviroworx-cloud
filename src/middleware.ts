@@ -1,19 +1,8 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { verifyAdminApiAuth, verifyCronAuth } from '@/lib/auth'
-import { verifySessionToken, sessionCookieName } from '@/lib/session'
-
-const OFFICE_ROLES = ['office', 'driver', 'yard']
-
-async function getOfficeSession(request: NextRequest) {
-  const token = request.cookies.get(sessionCookieName)?.value
-  if (!token) return null
-  try {
-    return await verifySessionToken(token)
-  } catch {
-    return null
-  }
-}
+import { createSupabaseMiddlewareClient } from '@/lib/supabase-middleware'
+import { canAccessOfficeRoutes } from '@/lib/office-access'
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -25,34 +14,48 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  if (
-    pathname.startsWith('/api/admin') ||
-    pathname === '/api/reports' ||
-    pathname === '/api/sms'
-  ) {
-    const session = await getOfficeSession(request)
-    const allowed = session && OFFICE_ROLES.includes(session.role)
-    if (!allowed && !verifyAdminApiAuth(request)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    return NextResponse.next()
-  }
-
   const isOfficeApp =
     pathname === '/office' || pathname.startsWith('/office/')
 
-  if (isOfficeApp && !pathname.startsWith('/office/login')) {
-    const session = await getOfficeSession(request)
-    if (!session || !OFFICE_ROLES.includes(session.role)) {
-      const login = new URL('/office/login', request.url)
-      if (pathname !== '/office') {
-        login.searchParams.set('next', pathname)
+  const isOfficeLogin = pathname.startsWith('/office/login')
+
+  const needsOfficeGate =
+    pathname.startsWith('/api/admin') ||
+    pathname === '/api/reports' ||
+    pathname === '/api/sms' ||
+    (isOfficeApp && !isOfficeLogin)
+
+  const needsSupabaseRefresh = needsOfficeGate || isOfficeLogin
+
+  let response = NextResponse.next({ request })
+
+  if (needsSupabaseRefresh) {
+    const { supabase, response: supaResponse } = createSupabaseMiddlewareClient(request)
+    response = supaResponse
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (pathname.startsWith('/api/admin') || pathname === '/api/reports' || pathname === '/api/sms') {
+      const allowed = (await canAccessOfficeRoutes(user, request)) || verifyAdminApiAuth(request)
+      if (!allowed) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
-      return NextResponse.redirect(login)
+    }
+
+    if (isOfficeApp && !isOfficeLogin) {
+      const allowed = await canAccessOfficeRoutes(user, request)
+      if (!allowed) {
+        const login = new URL('/office/login', request.url)
+        if (pathname !== '/office') {
+          login.searchParams.set('next', pathname)
+        }
+        return NextResponse.redirect(login)
+      }
     }
   }
 
-  return NextResponse.next()
+  return response
 }
 
 export const config = {
