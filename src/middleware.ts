@@ -1,7 +1,19 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { hasOfficeSession, verifyAdminApiAuth, verifyCronAuth } from '@/lib/auth'
+import { verifyAdminApiAuth, verifyCronAuth } from '@/lib/auth'
 import { verifySessionToken, sessionCookieName } from '@/lib/session'
+
+const OFFICE_ROLES = ['office', 'driver', 'yard']
+
+async function getOfficeSession(request: NextRequest) {
+  const token = request.cookies.get(sessionCookieName)?.value
+  if (!token) return null
+  try {
+    return await verifySessionToken(token)
+  } catch {
+    return null
+  }
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -18,19 +30,24 @@ export async function middleware(request: NextRequest) {
     pathname === '/api/reports' ||
     pathname === '/api/sms'
   ) {
-    if (!(await hasOfficeSession(request)) && !verifyAdminApiAuth(request)) {
+    const session = await getOfficeSession(request)
+    const allowed = session && OFFICE_ROLES.includes(session.role)
+    if (!allowed && !verifyAdminApiAuth(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     return NextResponse.next()
   }
 
-  if (pathname.startsWith('/office') && !pathname.startsWith('/office/login')) {
-    const token = request.cookies.get(sessionCookieName)?.value
-    const session = token ? await verifySessionToken(token) : null
-    const allowed = session && ['office', 'driver', 'yard'].includes(session.role)
-    if (!allowed && !(await hasOfficeSession(request))) {
+  const isOfficeApp =
+    pathname === '/office' || pathname.startsWith('/office/')
+
+  if (isOfficeApp && !pathname.startsWith('/office/login')) {
+    const session = await getOfficeSession(request)
+    if (!session || !OFFICE_ROLES.includes(session.role)) {
       const login = new URL('/office/login', request.url)
-      login.searchParams.set('next', pathname)
+      if (pathname !== '/office') {
+        login.searchParams.set('next', pathname)
+      }
       return NextResponse.redirect(login)
     }
   }
@@ -40,6 +57,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/office',
     '/office/:path*',
     '/api/cron/:path*',
     '/api/admin/:path*',

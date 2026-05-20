@@ -13,9 +13,15 @@ export type AppSession = {
 const COOKIE_NAME = 'ew_session'
 
 function getSecret() {
-  const raw = process.env.SESSION_SECRET || process.env.CRON_SECRET
+  const raw =
+    process.env.SESSION_SECRET ||
+    process.env.CRON_SECRET ||
+    (process.env.NODE_ENV === 'development' ? 'dev-only-change-in-production' : '')
   if (!raw) {
-    throw new Error('SESSION_SECRET or CRON_SECRET must be set')
+    throw new Error('SESSION_SECRET or CRON_SECRET must be set in production')
+  }
+  if (!process.env.SESSION_SECRET && process.env.NODE_ENV === 'development') {
+    console.warn('Using dev SESSION_SECRET — set SESSION_SECRET in .env.local')
   }
   return new TextEncoder().encode(raw)
 }

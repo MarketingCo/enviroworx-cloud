@@ -6,7 +6,11 @@ import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
 import toast from 'react-hot-toast'
 import KmlSyncButton from '@/components/KmlSyncButton'
 import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, DollarSign, Settings, Trash2 } from 'lucide-react'
-import { getDashboardStats, getDispatchJobs, getStoredTare, searchCustomers, getCustomerTimeline, generateReport, getSkipUtilization, getLorries, getDriversList, getCustomPricingList } from '@/lib/api'
+import {
+  listCustomersAction,
+  searchCustomersAction,
+  getCustomerTimelineAction,
+} from '@/app/actions/office-data'
 import { assignDriverToJobAction, autoAssignJobsAction, processBookingAction, logActiveTipperAction, processWeightLogAction, markJobPaidAction, cancelBookingAction, updateDriverPinAction, updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
 
 import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
@@ -16,21 +20,52 @@ export function CustomersTab() {
   const [results, setResults] = useState<any[]>([])
   const [timeline, setTimeline] = useState<any | null>(null)
   const [loading, setLoading] = useState(false)
+  const [initialLoaded, setInitialLoaded] = useState(false)
+
+  useEffect(() => {
+    async function loadInitial() {
+      setLoading(true)
+      try {
+        const data = await listCustomersAction(100)
+        setResults(data)
+        setInitialLoaded(true)
+      } catch (e: any) {
+        toast.error(e.message || 'Could not load customers')
+      }
+      setLoading(false)
+    }
+    loadInitial()
+  }, [])
 
   async function handleSearch() {
-    if (query.length < 2) return
+    if (query.length < 2) {
+      if (initialLoaded) {
+        const data = await listCustomersAction(100)
+        setResults(data)
+      }
+      setTimeline(null)
+      return
+    }
     setLoading(true)
-    const data = await searchCustomers(query)
-    setResults(data)
-    setTimeline(null)
+    try {
+      const data = await searchCustomersAction(query)
+      setResults(data)
+      setTimeline(null)
+    } catch (e: any) {
+      toast.error(e.message || 'Search failed')
+    }
     setLoading(false)
   }
 
   async function loadTimeline(customerName: string) {
     setLoading(true)
-    const data = await getCustomerTimeline(customerName)
-    setTimeline(data)
-    setResults([])
+    try {
+      const data = await getCustomerTimelineAction(customerName)
+      setTimeline(data)
+      setResults([])
+    } catch (e: any) {
+      toast.error(e.message || 'Could not load customer history')
+    }
     setLoading(false)
   }
 
@@ -59,10 +94,16 @@ export function CustomersTab() {
         )}
       </div>
 
-      {loading && <p className="text-slate-500 text-sm">Searching...</p>}
+      {loading && <p className="text-slate-500 text-sm">Loading...</p>}
+
+      {!loading && !timeline && results.length === 0 && (
+        <p className="text-slate-500 text-sm">
+          No customers found. Run data migration or add customers via New Booking.
+        </p>
+      )}
 
       {/* Search results */}
-      {results.length > 0 && (
+      {!timeline && results.length > 0 && (
         <div className="bg-slate-900 border border-white/5 rounded-xl overflow-hidden">
           {results.map((c: any) => (
             <button key={c.id} onClick={() => loadTimeline(c.name)}
@@ -112,7 +153,7 @@ export function CustomersTab() {
                       <span className="font-bold text-white">{fmt(j.amount)}</span>
                       {j.paid
                         ? <Badge label="Paid" color="bg-green-900/40 text-green-400" />
-                        : <button onClick={() => handleMarkPaid(j.orderId, 'Orders')} className="text-xs font-bold text-yellow-400 hover:text-yellow-300">Mark Paid</button>
+                        : <button onClick={() => handleMarkPaid(j.id, 'Orders')} className="text-xs font-bold text-yellow-400 hover:text-yellow-300">Mark Paid</button>
                       }
                     </div>
                   </div>

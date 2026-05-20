@@ -6,7 +6,7 @@ import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
 import toast from 'react-hot-toast'
 import KmlSyncButton from '@/components/KmlSyncButton'
 import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, DollarSign, Settings, Trash2 } from 'lucide-react'
-import { getDashboardStats, getDispatchJobs, getStoredTare, searchCustomers, getCustomerTimeline, generateReport, getSkipUtilization, getLorries, getDriversList, getCustomPricingList } from '@/lib/api'
+import { getInventoryAction } from '@/app/actions/office-data'
 import { assignDriverToJobAction, autoAssignJobsAction, processBookingAction, logActiveTipperAction, processWeightLogAction, markJobPaidAction, cancelBookingAction, updateDriverPinAction, updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
 
 import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
@@ -20,14 +20,17 @@ export function InventoryTab() {
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.from('inventory').select('*').order('skip_id')
-      setInventory(data ?? [])
+      try {
+        const data = await getInventoryAction()
+        setInventory(data)
+      } catch (e: any) {
+        toast.error(e.message || 'Could not load inventory')
+      }
       setLoading(false)
     }
     load()
-    const ch = supabase.channel('inv').on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, async () => {
-      const { data } = await supabase.from('inventory').select('*').order('skip_id')
-      setInventory(data ?? [])
+    const ch = supabase.channel('inv').on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => {
+      load()
     }).subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [])

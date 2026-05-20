@@ -42,6 +42,7 @@ export default function OfficeLogin() {
     }))
 
     router.push('/office')
+    router.refresh()
   }
 
   return (

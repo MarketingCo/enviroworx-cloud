@@ -6,9 +6,9 @@ import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
 import toast from 'react-hot-toast'
 import KmlSyncButton from '@/components/KmlSyncButton'
 import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, DollarSign, Settings, Trash2 } from 'lucide-react'
-import { getDashboardStats, getDispatchJobs, getStoredTare, searchCustomers, getCustomerTimeline, generateReport, getSkipUtilization, getLorries, getDriversList, getCustomPricingList } from '@/lib/api'
-import { assignDriverToJobAction, autoAssignJobsAction, processBookingAction, logActiveTipperAction, processWeightLogAction, markJobPaidAction, cancelBookingAction, updateDriverPinAction, updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
-import { geocodeAddress } from '@/app/actions/geo'
+import { searchCustomersAction } from '@/app/actions/office-data'
+import { processBookingAction } from '@/app/actions/operations'
+import AddressAutocomplete from '@/components/AddressAutocomplete'
 
 import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
 
@@ -22,28 +22,19 @@ export function BookingsTab() {
   const [loading, setLoading] = useState(false)
   const [suggestions, setSuggestions] = useState<any[]>([])
   const searchTimerRef = useRef<any>(null)
-  const [geocoding, setGeocoding] = useState(false)
-
   function set(k: string, v: any) { setForm(f => ({ ...f, [k]: v })) }
-
-  async function handleAddressBlur() {
-    if (!form.address || form.address.length < 5) return
-    setGeocoding(true)
-    const coords = await geocodeAddress(form.address)
-    if (coords) {
-      setForm(f => ({ ...f, latitude: coords.lat, longitude: coords.lng }))
-      toast.success('Location verified on map')
-    }
-    setGeocoding(false)
-  }
 
   function handleNameChange(v: string) {
     set('customerName', v)
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
     if (v.length > 2) {
       searchTimerRef.current = setTimeout(async () => {
-        const results = await searchCustomers(v)
-        setSuggestions(results)
+        try {
+          const results = await searchCustomersAction(v)
+          setSuggestions(results)
+        } catch {
+          setSuggestions([])
+        }
       }, 300)
     } else {
       setSuggestions([])
@@ -144,17 +135,24 @@ export function BookingsTab() {
 
         <div>
           <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">
-            Address {geocoding && <span className="text-primary animate-pulse ml-2 text-[10px]">Verifying...</span>}
+            Address (Scotland Central Belt)
           </label>
-          <input 
-            type="text" 
-            value={form.address} 
-            onChange={e => set('address', e.target.value)}
-            onBlur={handleAddressBlur}
-            className={`w-full bg-slate-800 border ${form.latitude ? 'border-emerald-500/50' : 'border-white/10'} text-white px-3 py-2 rounded text-sm focus:border-primary outline-none transition-colors`} 
-            placeholder="Full delivery address..."
+          <AddressAutocomplete
+            value={form.address}
+            onChange={(address) => set('address', address)}
+            onResolved={(r) => {
+              setForm((f) => ({
+                ...f,
+                address: r.address,
+                latitude: r.lat,
+                longitude: r.lng,
+              }))
+              toast.success('Address selected')
+            }}
+            verified={!!form.latitude}
+            placeholder="Start typing street address..."
+            className={`w-full bg-slate-800 border ${form.latitude ? 'border-emerald-500/50' : 'border-white/10'} text-white px-3 py-2 rounded text-sm focus:border-primary outline-none transition-colors`}
           />
-          {form.latitude && <p className="text-[9px] text-emerald-500 font-bold mt-1 uppercase tracking-tighter">✓ Coordinates pinned for Live Map</p>}
         </div>
 
         <div className="grid grid-cols-3 gap-4">

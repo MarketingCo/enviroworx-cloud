@@ -6,7 +6,7 @@ import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
 import toast from 'react-hot-toast'
 import KmlSyncButton from '@/components/KmlSyncButton'
 import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, FileSpreadsheet, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, DollarSign, Settings, Trash2 } from 'lucide-react'
-import { getDashboardStats, getDispatchJobs, getStoredTare, searchCustomers, getCustomerTimeline, generateReport, getSkipUtilization, getLorries, getDriversList, getCustomPricingList } from '@/lib/api'
+import { generateReportAction } from '@/app/actions/office-data'
 import { assignDriverToJobAction, autoAssignJobsAction, processBookingAction, logActiveTipperAction, processWeightLogAction, markJobPaidAction, cancelBookingAction, updateDriverPinAction, updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
 
 import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
@@ -20,7 +20,7 @@ export function ReportsTab() {
   async function handleGenerate(type: string, label: string) {
     setLoading(type)
     try {
-      const data = await generateReport(type, startDate, endDate)
+      const data = await generateReportAction(type, startDate, endDate)
       if (!data.length) { toast.error('No data for this period'); setLoading(null); return }
 
       // Convert to CSV
