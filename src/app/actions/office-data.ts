@@ -3,6 +3,18 @@
 import { requireOfficeSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase'
 import { DEFAULT_CONFIG } from '@/lib/config'
+import { writeAudit, auditFromSession } from '@/lib/audit'
+import { toActionError } from '@/lib/action-errors'
+
+function normalizeCustomerName(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b(ltd|limited|plc|uk)\b\.?/gi, '')
+    .replace(/[^\w\s&'-]/g, '')
+    .trim()
+}
 
 /** Office reads use service role so RLS never blocks the operations UI. */
 async function assertOffice() {
@@ -226,4 +238,156 @@ function getWeekStart() {
   const diff = d.getDate() - day + (day === 0 ? -6 : 1)
   const monday = new Date(d.setDate(diff))
   return monday.toISOString().split('T')[0]
+}
+
+export async function getAuditLogAction(limit = 80) {
+  await assertOffice()
+  const { data, error } = await supabaseAdmin
+    .from('activity_log')
+    .select('id, type, message, status, actor_email, actor_name, entity_type, entity_id, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+export async function getOfficeSessionAction() {
+  const session = await requireOfficeSession()
+  return {
+    name: session.name,
+    email: session.email ?? null,
+    officeRole: session.officeRole ?? null,
+  }
+}
+
+export async function listOfficeStaffAction() {
+  await assertOffice()
+  const { data, error } = await supabaseAdmin
+    .from('office_staff')
+    .select('id, email, display_name, role, active')
+    .order('email')
+
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+/** Groups customers with similar normalized names (possible duplicates). */
+export async function findDuplicateCustomersAction() {
+  await assertOffice()
+  const { data, error } = await supabaseAdmin
+    .from('customers')
+    .select('id, name, phone, account_balance')
+    .order('name')
+    .limit(500)
+
+  if (error) throw new Error(error.message)
+
+  const groups = new Map<string, typeof data>()
+  for (const c of data ?? []) {
+    const key = normalizeCustomerName(c.name)
+    if (!key) continue
+    const list = groups.get(key) ?? []
+    list.push(c)
+    groups.set(key, list)
+  }
+
+  return [...groups.entries()]
+    .filter(([, list]) => list.length > 1)
+    .map(([key, customers]) => ({ key, customers }))
+}
+
+/** Merge duplicate customer records into one primary account. */
+export async function mergeCustomersAction(primaryId: string, duplicateIds: string[]) {
+  const session = await requireOfficeSession()
+  const ids = duplicateIds.filter((id) => id && id !== primaryId)
+  if (!ids.length) throw new Error('Select at least one duplicate to merge')
+
+  try {
+    const { data: primary, error: pErr } = await supabaseAdmin
+      .from('customers')
+      .select('id, name')
+      .eq('id', primaryId)
+      .single()
+    if (pErr || !primary) throw new Error('Primary customer not found')
+
+    const { data: dupes } = await supabaseAdmin
+      .from('customers')
+      .select('id, name')
+      .in('id', ids)
+
+    for (const d of dupes ?? []) {
+      await supabaseAdmin
+        .from('orders')
+        .update({ customer_name: primary.name })
+        .ilike('customer_name', d.name)
+      await supabaseAdmin
+        .from('cash_log')
+        .update({ customer_name: primary.name })
+        .ilike('customer_name', d.name)
+    }
+
+    const { error: delErr } = await supabaseAdmin.from('customers').delete().in('id', ids)
+    if (delErr) throw delErr
+
+    await writeAudit(
+      auditFromSession(session, {
+        type: 'customer.merge',
+        message: `Merged ${ids.length} duplicate(s) into ${primary.name}`,
+        entityType: 'customer',
+        entityId: primaryId,
+        metadata: { mergedIds: ids },
+      })
+    )
+
+    return { success: true, primaryName: primary.name, mergedCount: ids.length }
+  } catch (e) {
+    throw toActionError(e)
+  }
+}
+
+export async function getOpsSummaryAction(startDate: string, endDate: string) {
+  await assertOffice()
+  const end = endDate.includes('T') ? endDate : `${endDate}T23:59:59`
+
+  const [
+    { data: cash },
+    { count: completedJobs },
+    { count: openJobs },
+    { count: unpaidCount },
+  ] = await Promise.all([
+    supabaseAdmin
+      .from('cash_log')
+      .select('cost_gross, net_weight, amount_paid, payment_method')
+      .gte('logged_at', startDate)
+      .lte('logged_at', end),
+    supabaseAdmin
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'Completed')
+      .gte('date', startDate)
+      .lte('date', endDate),
+    supabaseAdmin
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['Booked', 'Assigned', 'Out for Delivery', 'On Site'])
+      .gte('date', startDate)
+      .lte('date', endDate),
+    supabaseAdmin.from('v_unpaid_invoices').select('id', { count: 'exact', head: true }),
+  ])
+
+  const cashGross = cash?.reduce((s, r) => s + (r.cost_gross || 0), 0) ?? 0
+  const cashPaid = cash?.reduce((s, r) => s + (r.amount_paid || 0), 0) ?? 0
+  const tonnageKg = cash?.reduce((s, r) => s + (r.net_weight || 0), 0) ?? 0
+  const tipCount = cash?.length ?? 0
+
+  return {
+    cashGross,
+    cashPaid,
+    tonnageTonnes: tonnageKg / 1000,
+    tipCount,
+    completedJobs: completedJobs ?? 0,
+    openJobs: openJobs ?? 0,
+    unpaidInvoices: unpaidCount ?? 0,
+  }
 }

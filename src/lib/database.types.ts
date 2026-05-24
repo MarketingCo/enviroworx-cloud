@@ -157,9 +157,72 @@ export type Database = {
         Relationships: []
       }
       activity_log: {
-        Row: { id: string; created_at: string | null; type: string | null; message: string | null; status: string | null }
-        Insert: { id?: string; created_at?: string | null; type?: string | null; message?: string | null; status?: string | null }
-        Update: { id?: string; created_at?: string | null; type?: string | null; message?: string | null; status?: string | null }
+        Row: {
+          id: string
+          created_at: string | null
+          type: string | null
+          message: string | null
+          status: string | null
+          actor_email: string | null
+          actor_name: string | null
+          entity_type: string | null
+          entity_id: string | null
+          metadata: Json | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string | null
+          type?: string | null
+          message?: string | null
+          status?: string | null
+          actor_email?: string | null
+          actor_name?: string | null
+          entity_type?: string | null
+          entity_id?: string | null
+          metadata?: Json | null
+        }
+        Update: {
+          id?: string
+          created_at?: string | null
+          type?: string | null
+          message?: string | null
+          status?: string | null
+          actor_email?: string | null
+          actor_name?: string | null
+          entity_type?: string | null
+          entity_id?: string | null
+          metadata?: Json | null
+        }
+        Relationships: []
+      }
+      office_staff: {
+        Row: {
+          id: string
+          email: string
+          display_name: string | null
+          role: string
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          email: string
+          display_name?: string | null
+          role?: string
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          display_name?: string | null
+          role?: string
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
         Relationships: []
       }
       vehicle_telemetry: {

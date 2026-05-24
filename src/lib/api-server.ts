@@ -822,11 +822,13 @@ export async function driverUpdateJob(orderId: string, updates: {
   address?: string
   deliveryComments?: string
   phone?: string
+  status?: string
 }) {
   const payload: Record<string, any> = {}
   if (updates.address) payload.address = updates.address
   if (updates.deliveryComments) payload.delivery_comments = updates.deliveryComments
   if (updates.phone) payload.phone = updates.phone
+  if (updates.status) payload.status = updates.status
 
   if (Object.keys(payload).length === 0) return { success: false, message: 'Nothing to update' }
 

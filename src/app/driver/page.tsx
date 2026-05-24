@@ -3,7 +3,14 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getDriverJobs } from '@/lib/api'
-import { completeJobAction, clockInOutAction } from '@/app/actions/operations'
+import { completeJobAction, clockInOutAction, driverOnSiteAction } from '@/app/actions/operations'
+import {
+  getDriverQueue,
+  setDriverQueue,
+  enqueueDriverAction,
+  clearDriverQueue,
+  type QueuedDriverAction,
+} from '@/lib/driver-queue'
 import { abortJobWithNotification } from '@/app/actions/notifications'
 import { DEFAULT_CONFIG } from '@/lib/config'
 import toast, { Toaster } from 'react-hot-toast'
@@ -63,6 +70,7 @@ export default function DriverApp() {
   const [pin, setPin] = useState('')
   const isOnline = useOnline()
   const breakTimer = useBreakTimer(state.breakStart)
+  const [queueCount, setQueueCount] = useState(0)
 
   const isConfigMissing = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -102,6 +110,36 @@ export default function DriverApp() {
     }
     setLoading(false)
   }
+
+  const flushQueue = useCallback(async () => {
+    const queue = getDriverQueue()
+    if (!queue.length || !navigator.onLine) return
+    const remaining: QueuedDriverAction[] = []
+    for (const item of queue) {
+      try {
+        if (item.type === 'complete') {
+          await completeJobAction(item.payload as Parameters<typeof completeJobAction>[0])
+        } else if (item.type === 'on_site') {
+          const p = item.payload as { orderId: string; phone?: string }
+          await driverOnSiteAction(p.orderId, p.phone)
+        }
+      } catch {
+        remaining.push(item)
+      }
+    }
+    setDriverQueue(remaining)
+    setQueueCount(remaining.length)
+    if (remaining.length === 0) clearDriverQueue()
+    if (queue.length > remaining.length) {
+      toast.success('Offline actions synced')
+      if (state.driver) await loadJobs(state.driver)
+    }
+  }, [state.driver])
+
+  useEffect(() => {
+    setQueueCount(getDriverQueue().length)
+    if (isOnline) flushQueue()
+  }, [isOnline, flushQueue])
 
   async function handleClockIn() {
     if (!selectedDriver || !selectedLorry || !pin) return toast.error('Select name, lorry, and enter PIN')
@@ -150,22 +188,52 @@ export default function DriverApp() {
 
   async function handleComplete(job: any, skipId: string, photoUrl?: string) {
     if (!skipId.trim()) return toast.error('⚠️ Enter the Skip ID')
+    const payload = {
+      orderId: job.id,
+      skipId,
+      jobType: job.job_type,
+      address: job.address,
+      customerName: job.customer_name,
+      lorryReg: state.lorry || '',
+      photoUrl,
+    }
+    if (!isOnline) {
+      enqueueDriverAction('complete', payload)
+      setQueueCount(getDriverQueue().length)
+      setJobs((prev) => prev.filter((j) => j.id !== job.id))
+      toast('Job saved offline — will sync when connected', { icon: '📡' })
+      return
+    }
     setLoading(true)
     setLoaderText('Syncing...')
     try {
-      const result = await completeJobAction({
-        orderId: job.id,
-        skipId,
-        jobType: job.job_type,
-        address: job.address,
-        customerName: job.customer_name,
-        lorryReg: state.lorry || '',
-        photoUrl,
-      })
+      const result = await completeJobAction(payload)
       toast.success(result.message)
-      setJobs(prev => prev.filter(j => j.id !== job.id))
-    } catch (e: any) {
-      toast.error(e.message)
+      setJobs((prev) => prev.filter((j) => j.id !== job.id))
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Sync failed')
+    }
+    setLoading(false)
+  }
+
+  async function handleOnSite(job: { id: string; phone?: string | null }) {
+    if (!isOnline) {
+      enqueueDriverAction('on_site', { orderId: job.id, phone: job.phone ?? undefined })
+      setQueueCount(getDriverQueue().length)
+      setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, status: 'On Site' } : j)))
+      toast('Saved offline — will sync when connected', { icon: '📡' })
+      return
+    }
+    setLoading(true)
+    setLoaderText('Updating status...')
+    try {
+      await driverOnSiteAction(job.id, job.phone ?? undefined)
+      toast.success('Customer notified — you are on site')
+      setJobs((prev) =>
+        prev.map((j) => (j.id === job.id ? { ...j, status: 'On Site' } : j))
+      )
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Could not update status')
     }
     setLoading(false)
   }
@@ -237,7 +305,7 @@ export default function DriverApp() {
       {/* Offline Banner */}
       {!isOnline && (
         <div className="bg-red-600 text-white text-center py-2 text-sm font-bold tracking-wide animate-pulse">
-          ⚠️ NO INTERNET — Changes will sync when back online
+          ⚠️ NO INTERNET — {queueCount > 0 ? `${queueCount} action(s) queued` : 'Changes will sync when back online'}
         </div>
       )}
 
@@ -289,6 +357,7 @@ export default function DriverApp() {
               config={DEFAULT_CONFIG}
               onComplete={handleComplete}
               onAbort={handleAbort}
+              onOnSite={handleOnSite}
             />
           ))
         )}
@@ -298,8 +367,9 @@ export default function DriverApp() {
 }
 
 // ---- DRIVER JOB CARD v2 ----
-function DriverJobCard({ job, index, total, config, onComplete, onAbort }: any) {
+function DriverJobCard({ job, index, total, config, onComplete, onAbort, onOnSite }: any) {
   const [skipId, setSkipId] = useState('')
+  const [onSite, setOnSite] = useState(job.status === 'On Site')
   const [showAbort, setShowAbort] = useState(false)
   const [abortReason, setAbortReason] = useState('')
   const [photoTaken, setPhotoTaken] = useState(false)
@@ -405,8 +475,25 @@ function DriverJobCard({ job, index, total, config, onComplete, onAbort }: any) 
         )}
       </div>
 
-      {/* Navigation Buttons */}
-      <div className="px-5 pb-4">
+      {/* On site + navigate */}
+      <div className="px-5 pb-4 space-y-2">
+        {!onSite && (
+          <button
+            type="button"
+            onClick={async () => {
+              await onOnSite(job)
+              setOnSite(true)
+            }}
+            className="w-full bg-amber-500/15 border border-amber-500/40 text-amber-300 py-3 rounded-xl font-black text-sm uppercase tracking-wide"
+          >
+            📍 I&apos;m on site
+          </button>
+        )}
+        {onSite && (
+          <p className="text-center text-xs font-black uppercase tracking-widest text-amber-400">
+            On site — complete job when finished
+          </p>
+        )}
         <div className="relative">
           <button
             onClick={() => setShowMapMenu(!showMapMenu)}

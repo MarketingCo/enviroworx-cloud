@@ -12,6 +12,7 @@ export type Tab =
   | 'fleet'
   | 'inventory'
   | 'map'
+  | 'activity'
   | 'settings'
 
 export interface DashStats {

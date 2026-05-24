@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
 import toast from 'react-hot-toast'
 import KmlSyncButton from '@/components/KmlSyncButton'
 import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, FileSpreadsheet, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, DollarSign, Settings, Trash2 } from 'lucide-react'
-import { generateReportAction } from '@/app/actions/office-data'
+import { generateReportAction, getOpsSummaryAction } from '@/app/actions/office-data'
 import { assignDriverToJobAction, autoAssignJobsAction, processBookingAction, logActiveTipperAction, processWeightLogAction, markJobPaidAction, cancelBookingAction, updateDriverPinAction, updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
 
 import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
@@ -16,6 +16,21 @@ export function ReportsTab() {
   const [startDate, setStartDate] = useState(`${thisMonth}-01`)
   const [endDate, setEndDate] = useState(today())
   const [loading, setLoading] = useState<string | null>(null)
+  const [summary, setSummary] = useState<{
+    cashGross: number
+    cashPaid: number
+    tonnageTonnes: number
+    tipCount: number
+    completedJobs: number
+    openJobs: number
+    unpaidInvoices: number
+  } | null>(null)
+
+  useEffect(() => {
+    getOpsSummaryAction(startDate, endDate)
+      .then(setSummary)
+      .catch(() => setSummary(null))
+  }, [startDate, endDate])
 
   async function handleGenerate(type: string, label: string) {
     setLoading(type)
@@ -65,6 +80,22 @@ export function ReportsTab() {
 
   return (
     <div className="space-y-6 max-w-2xl">
+      {summary && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'Cash (gross)', value: fmt(summary.cashGross) },
+            { label: 'Tonnage', value: `${summary.tonnageTonnes.toFixed(1)}t` },
+            { label: 'Jobs done', value: String(summary.completedJobs) },
+            { label: 'Unpaid inv.', value: String(summary.unpaidInvoices) },
+          ].map((k) => (
+            <div key={k.label} className="bg-slate-900 border border-white/5 rounded-xl p-4">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{k.label}</p>
+              <p className="text-xl font-black text-white mt-1">{k.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">From</label>

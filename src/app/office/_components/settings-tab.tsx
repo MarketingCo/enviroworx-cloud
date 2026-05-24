@@ -8,6 +8,7 @@ import KmlSyncButton from '@/components/KmlSyncButton'
 import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, DollarSign, Settings, Trash2 } from 'lucide-react'
 import { getDashboardStats, getDispatchJobs, getStoredTare, searchCustomers, getCustomerTimeline, generateReport, getSkipUtilization, getLorries, getDriversList, getCustomPricingList } from '@/lib/api'
 import { assignDriverToJobAction, autoAssignJobsAction, processBookingAction, logActiveTipperAction, processWeightLogAction, markJobPaidAction, cancelBookingAction, updateDriverPinAction, updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
+import { listOfficeStaffAction } from '@/app/actions/office-data'
 
 import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
 
@@ -23,17 +24,22 @@ export function SettingsTab() {
     waste_type: '',
     net_price: ''
   })
+  const [officeStaff, setOfficeStaff] = useState<
+    { id: string; email: string; display_name: string | null; role: string; active: boolean }[]
+  >([])
 
   async function load() {
     setLoading(true)
-    const [{ data }, rates] = await Promise.all([
+    const [{ data }, rates, staff] = await Promise.all([
       supabase.from('config').select('*'),
-      getCustomPricingList()
+      getCustomPricingList(),
+      listOfficeStaffAction().catch(() => []),
     ])
     const cfg: any = {}
     data?.forEach(row => { cfg[row.key] = row.value })
     setConfig(cfg)
     setCustomRates(rates)
+    setOfficeStaff(staff as typeof officeStaff)
     setLoading(false)
   }
 
@@ -236,6 +242,35 @@ export function SettingsTab() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl">
+        <SectionHeader title="Office access (Google)" />
+        <p className="text-xs text-slate-500 mt-2 mb-4 leading-relaxed">
+          Staff listed in Supabase <code className="text-slate-400">office_staff</code> get roles after Google
+          sign-in. Add rows in the SQL editor or Table Editor — see{' '}
+          <code className="text-slate-400">docs/STAFF_GUIDE.md</code>.
+        </p>
+        {officeStaff.length === 0 ? (
+          <p className="text-sm text-amber-400/90">
+            No rows in office_staff yet — allowlist domains still work via env vars.
+          </p>
+        ) : (
+          <ul className="divide-y divide-white/5 rounded-xl border border-white/5 overflow-hidden">
+            {officeStaff.map((s) => (
+              <li key={s.id} className="flex justify-between items-center px-4 py-3 text-sm">
+                <div>
+                  <p className="text-white font-semibold">{s.display_name || s.email}</p>
+                  <p className="text-xs text-slate-500">{s.email}</p>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-primary">
+                  {s.role}
+                  {!s.active ? ' · inactive' : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import type { NextRequest } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { isOfficeGoogleEmailAllowed, officePinAuthEnabled } from '@/lib/office-google'
+import { lookupOfficeStaff, type OfficeStaffRole } from '@/lib/office-staff'
 
 export type SessionRole = 'office' | 'driver' | 'yard' | 'portal'
 
@@ -10,6 +11,8 @@ export type AppSession = {
   sub: string
   name: string
   role: SessionRole
+  email?: string
+  officeRole?: OfficeStaffRole
 }
 
 const COOKIE_NAME = 'ew_session'
@@ -92,16 +95,22 @@ export async function resolveOfficeSession(): Promise<AppSession | null> {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (user?.email && isOfficeGoogleEmailAllowed(user.email)) {
-    const meta = user.user_metadata as { full_name?: string } | undefined
-    const name =
-      (typeof meta?.full_name === 'string' && meta.full_name.trim()) ||
-      user.email.split('@')[0] ||
-      'Staff'
-    return {
-      sub: user.id,
-      name,
-      role: 'office',
+  if (user?.email) {
+    const staff = await lookupOfficeStaff(user.email)
+    if (staff) {
+      const meta = user.user_metadata as { full_name?: string } | undefined
+      const name =
+        staff.display_name?.trim() ||
+        (typeof meta?.full_name === 'string' && meta.full_name.trim()) ||
+        user.email.split('@')[0] ||
+        'Staff'
+      return {
+        sub: user.id,
+        name,
+        role: 'office',
+        email: staff.email,
+        officeRole: staff.role,
+      }
     }
   }
 

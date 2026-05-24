@@ -436,6 +436,8 @@ export default function CustomerPortal() {
                       <td className="p-3">
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                           o.status === 'Completed' ? 'bg-emerald-500/20 text-emerald-400' :
+                          o.status === 'On Site' ? 'bg-purple-500/20 text-purple-300' :
+                          o.status === 'Out for Delivery' ? 'bg-cyan-500/20 text-cyan-300' :
                           o.status === 'Booked' ? 'bg-blue-500/20 text-blue-400' :
                           'bg-amber-500/20 text-amber-400'
                         }`}>{o.status}</span>

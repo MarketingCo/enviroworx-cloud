@@ -10,6 +10,8 @@ import {
   listCustomersAction,
   searchCustomersAction,
   getCustomerTimelineAction,
+  findDuplicateCustomersAction,
+  mergeCustomersAction,
 } from '@/app/actions/office-data'
 import { assignDriverToJobAction, autoAssignJobsAction, processBookingAction, logActiveTipperAction, processWeightLogAction, markJobPaidAction, cancelBookingAction, updateDriverPinAction, updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
 
@@ -21,6 +23,10 @@ export function CustomersTab() {
   const [timeline, setTimeline] = useState<any | null>(null)
   const [loading, setLoading] = useState(false)
   const [initialLoaded, setInitialLoaded] = useState(false)
+  const [duplicates, setDuplicates] = useState<
+    { key: string; customers: { id: string; name: string; phone: string | null }[] }[]
+  >([])
+  const [mergePrimary, setMergePrimary] = useState<Record<string, string>>({})
 
   useEffect(() => {
     async function loadInitial() {
@@ -35,7 +41,33 @@ export function CustomersTab() {
       setLoading(false)
     }
     loadInitial()
+    findDuplicateCustomersAction()
+      .then(setDuplicates)
+      .catch(() => {})
   }, [])
+
+  async function handleMerge(groupKey: string, customers: { id: string; name: string }[]) {
+    const primaryId = mergePrimary[groupKey] || customers[0]?.id
+    const duplicateIds = customers.filter((c) => c.id !== primaryId).map((c) => c.id)
+    if (!primaryId || !duplicateIds.length) {
+      toast.error('Select which record to keep as primary')
+      return
+    }
+    if (!confirm(`Merge ${duplicateIds.length} duplicate(s) into the primary account? This cannot be undone.`)) {
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await mergeCustomersAction(primaryId, duplicateIds)
+      toast.success(`Merged into ${res.primaryName}`)
+      const [list, dups] = await Promise.all([listCustomersAction(100), findDuplicateCustomersAction()])
+      setResults(list)
+      setDuplicates(dups)
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Merge failed')
+    }
+    setLoading(false)
+  }
 
   async function handleSearch() {
     if (query.length < 2) {
@@ -93,6 +125,35 @@ export function CustomersTab() {
           </button>
         )}
       </div>
+
+      {duplicates.length > 0 && !timeline && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-5 space-y-4">
+          <SectionHeader title={`Possible duplicates (${duplicates.length})`} />
+          {duplicates.slice(0, 5).map((group) => (
+            <div key={group.key} className="bg-slate-900/80 rounded-lg p-4 space-y-3">
+              {group.customers.map((c) => (
+                <label key={c.id} className="flex items-center gap-3 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name={`primary-${group.key}`}
+                    checked={(mergePrimary[group.key] || group.customers[0]?.id) === c.id}
+                    onChange={() => setMergePrimary((p) => ({ ...p, [group.key]: c.id }))}
+                  />
+                  <span className="text-white font-semibold">{c.name}</span>
+                  <span className="text-slate-500 text-xs">{c.phone}</span>
+                </label>
+              ))}
+              <button
+                type="button"
+                onClick={() => handleMerge(group.key, group.customers)}
+                className="text-xs font-black uppercase tracking-widest text-amber-300 hover:text-white"
+              >
+                Merge into primary
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {loading && <p className="text-slate-500 text-sm">Loading...</p>}
 

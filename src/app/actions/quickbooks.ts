@@ -2,49 +2,57 @@
 
 import { createDraftInvoice } from '@/lib/quickbooks'
 import { supabaseAdmin } from '@/lib/supabase'
+import { withOfficeAction } from '@/lib/office-action'
 
 export async function syncOrderToQuickBooks(orderId: string) {
   try {
-    // 1. Fetch full order details
-    const { data: order, error: fetchError } = await supabaseAdmin
-      .from('orders')
-      .select('*')
-      .eq('id', orderId)
-      .single()
+    return await withOfficeAction(
+    {
+      type: 'quickbooks.sync',
+      message: `QuickBooks sync for order`,
+      entityType: 'order',
+      entityId: orderId,
+    },
+    async () => {
+      const { data: order, error: fetchError } = await supabaseAdmin
+        .from('orders')
+        .select('*')
+        .eq('id', orderId)
+        .single()
 
-    if (fetchError || !order) throw new Error('Order not found')
+      if (fetchError || !order) throw new Error('Order not found')
 
-    // 2. Fetch cash log to get the actual cost (where financial data is final)
-    const { data: cashLog } = await supabaseAdmin
-      .from('cash_log')
-      .select('*')
-      .eq('ticket_number', order.skip_id_used || '') // Using skip_id_used or other ref
-      .single()
+      const { data: cashLog } = await supabaseAdmin
+        .from('cash_log')
+        .select('*')
+        .eq('ticket_number', order.skip_id_used || '')
+        .maybeSingle()
 
-    // 3. Prepare data for QB
-    const invoice = await createDraftInvoice({
-      customer_name: order.customer_name,
-      address: order.address,
-      skip_size: order.skip_size,
-      skip_id: order.skip_id_used || 'N/A',
-      date: order.date,
-      id: order.id,
-      amount: cashLog?.cost_gross || 0 // Default to 0 if not logged yet
-    })
-
-    // 4. Update order with QB reference
-    const qbInvoice = invoice as any
-    await supabaseAdmin
-      .from('orders')
-      .update({ 
-        comments: `${order.comments || ''}\n[QB Sync: ${qbInvoice.Id}]`.trim(),
-        paid: false // Ensure it's marked as unpaid until QB syncs back
+      const invoice = await createDraftInvoice({
+        customer_name: order.customer_name,
+        address: order.address,
+        skip_size: order.skip_size,
+        skip_id: order.skip_id_used || 'N/A',
+        date: order.date,
+        id: order.id,
+        amount: cashLog?.cost_gross || 0,
       })
-      .eq('id', orderId)
 
-    return { success: true, qbId: qbInvoice.Id }
-  } catch (error: any) {
-    console.error('QB Sync Action Error:', error)
-    return { success: false, error: error.message }
+      const qbInvoice = invoice as { Id?: string }
+      await supabaseAdmin
+        .from('orders')
+        .update({
+          comments: `${order.comments || ''}\n[QB Sync: ${qbInvoice.Id}]`.trim(),
+        })
+        .eq('id', orderId)
+
+      return { success: true, qbId: qbInvoice.Id }
+    }
+    )
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'QuickBooks sync failed',
+    }
   }
 }

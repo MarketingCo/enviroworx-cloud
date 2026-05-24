@@ -59,14 +59,21 @@ export async function safeActivityLog(payload: {
   type: string
   message: string
   status: string
+  actorEmail?: string
+  actorName?: string
+  entityType?: string
+  entityId?: string
+  metadata?: Record<string, unknown>
 }) {
-  try {
-    await supabaseAdmin.from('activity_log').insert({
-      ...payload,
-      created_at: new Date().toISOString(),
-    })
-  } catch (e) {
-    // Silently ignore if activity_log doesn't exist yet
-    console.warn('Activity log skipped:', e)
-  }
+  const { writeAudit } = await import('@/lib/audit')
+  await writeAudit({
+    type: payload.type,
+    message: payload.message,
+    status: payload.status,
+    actorEmail: payload.actorEmail,
+    actorName: payload.actorName,
+    entityType: payload.entityType,
+    entityId: payload.entityId,
+    metadata: payload.metadata,
+  })
 }

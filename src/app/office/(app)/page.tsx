@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { getDashboardStatsAction } from '@/app/actions/office-data'
+import { getDashboardStatsAction, getOfficeSessionAction } from '@/app/actions/office-data'
 import toast, { Toaster } from 'react-hot-toast'
 import {
   LayoutDashboard,
@@ -18,6 +18,7 @@ import {
   TrendingUp,
   Settings,
   LogOut,
+  ScrollText,
 } from 'lucide-react'
 import type { Tab, DashStats } from '../_components/shared'
 import { DashboardTab } from '../_components/dashboard-tab'
@@ -30,12 +31,20 @@ import { InventoryTab } from '../_components/inventory-tab'
 import { FleetTab } from '../_components/fleet-tab'
 import { MapTab } from '../_components/map-tab'
 import { SettingsTab } from '../_components/settings-tab'
+import { ActivityTab } from '../_components/activity-tab'
 
 export default function OfficePage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('dashboard')
   const [dashData, setDashData] = useState<DashStats | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [staffName, setStaffName] = useState<string | null>(null)
+
+  useEffect(() => {
+    getOfficeSessionAction()
+      .then((s) => setStaffName(s.name))
+      .catch(() => setStaffName(null))
+  }, [])
 
   const loadDash = useCallback(async () => {
     setRefreshing(true)
@@ -112,6 +121,7 @@ export default function OfficePage() {
     { id: 'fleet', label: 'Fleet', icon: <Wrench size={16} /> },
     { id: 'inventory', label: 'Inventory', icon: <Package size={16} /> },
     { id: 'map', label: 'Live Map', icon: <TrendingUp size={16} /> },
+    { id: 'activity', label: 'Activity', icon: <ScrollText size={16} /> },
     { id: 'settings', label: 'Settings', icon: <Settings size={16} /> },
   ]
 
@@ -135,6 +145,11 @@ export default function OfficePage() {
             <span className="font-black italic tracking-tighter uppercase text-sm">
               Enviroworx <span className="text-primary">Office</span>
             </span>
+            {staffName && (
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest hidden sm:inline">
+                · {staffName}
+              </span>
+            )}
           </div>
 
           <nav className="flex items-center gap-1 overflow-x-auto">
@@ -215,6 +230,7 @@ export default function OfficePage() {
         {tab === 'fleet' && <FleetTab />}
         {tab === 'inventory' && <InventoryTab />}
         {tab === 'map' && <MapTab />}
+        {tab === 'activity' && <ActivityTab />}
         {tab === 'settings' && <SettingsTab />}
       </main>
     </div>

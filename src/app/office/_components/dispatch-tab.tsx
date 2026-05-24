@@ -55,11 +55,12 @@ export function DispatchTab() {
   async function handleQBSync(orderId: string) {
     toast.loading('Syncing to QuickBooks...', { id: orderId })
     const res = await syncOrderToQuickBooks(orderId)
-    if (res.success) {
+    if (res.success && 'qbId' in res) {
       toast.success(`Draft Invoice Created: ${res.qbId}`, { id: orderId })
       load()
     } else {
-      toast.error(`Sync failed: ${res.error}`, { id: orderId })
+      const err = 'error' in res ? res.error : 'Unknown error'
+      toast.error(`Sync failed: ${err}`, { id: orderId })
     }
   }
 
