@@ -1,162 +1,94 @@
-# Enviroworx Cloud - Quick Start Deployment Guide
+# Enviroworx Cloud — Quick start (2026 handover)
 
-## What You Have
+## Live URLs
 
-A complete **Next.js 14 + Supabase** replacement for your Google Sheets + Apps Script system. 88% feature-complete with all core business logic migrated.
+| App | Path | Auth |
+|-----|------|------|
+| Marketing site | `/` | Public |
+| **Office** | `/office/login` | Google (company account) |
+| Driver PWA | `/driver` | Name + PIN |
+| Customer portal | `/portal` | Name + portal PIN |
+| Yard tablet | `/tablet` | Yard PIN |
+| Health check | `/api/health` | Public |
 
-**Files Generated:**
-- Complete Next.js application in `/enviroworx-cloud/`
-- Database schema (SQL) ready to paste into Supabase
-- Data migration script to move your 1500+ customers, 1000+ orders, etc.
-- API routes for all integrations (SMS, reports, documents)
-- 4 UI routes: office dashboard, driver app, customer portal, yard tablet
+Full handover checklist: **`docs/HANDOVER.md`**  
+Staff how-to: **`docs/STAFF_GUIDE.md`**
 
-## Deployment Steps (15 mins)
+---
 
-### Step 1: Create Supabase Project (2 mins)
-1. Go to https://supabase.com
-2. Click "New Project"
-3. Name it "enviroworx"
-4. Choose a region close to UK
-5. Create a strong password
-6. Wait for database to spin up (~1 min)
+## 1. Supabase (15 min)
 
-### Step 2: Apply Database Schema (3 mins)
-1. Copy ALL contents from: `SCHEMA_FOR_PASTING.sql` (this file is ready to paste)
-2. In Supabase dashboard, go **SQL Editor** → **New Query**
-3. Paste the entire SQL
-4. Click **Run**
-5. Wait for "Success" message
+1. Create project at [supabase.com](https://supabase.com) (UK region).
+2. Run SQL migrations in `supabase/migrations/` (oldest first), including **`20260520000000_platform_hardening.sql`**.
+3. **Storage:** bucket `job-photos` for driver proof photos.
+4. **Auth → Google** enabled; redirect URL: `https://YOUR-DOMAIN/auth/callback`.
+5. Insert office users into `office_staff` (see `docs/HANDOVER.md`).
 
-### Step 3: Get Your API Keys (1 min)
-1. In Supabase, go **Settings** → **API**
-2. Copy:
-   - **Project URL** (looks like `https://abc123.supabase.co`)
-   - **anon key** (public key)
-   - **service_role key** (secret key — keep this safe!)
+---
 
-### Step 4: Configure Environment (2 mins)
-1. In your project folder, copy `.env.local.example` to `.env.local`
-2. Fill in:
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-   TWILIO_ACCOUNT_SID=optional-for-sms
-   TWILIO_AUTH_TOKEN=optional-for-sms
-   TWILIO_FROM_NUMBER=optional-for-sms
-   ```
+## 2. Environment variables
 
-### Step 5: Deploy to Vercel (5 mins)
-1. Push code to GitHub
-2. Go to https://vercel.com → Import Project
-3. Select your GitHub repo
-4. Set environment variables (same as .env.local)
-5. Click Deploy
-6. Wait for build (~2 mins)
-7. Get your live URL (looks like `https://enviroworx.vercel.app`)
+Copy `.env.local.example` → `.env.local` (and set the same in **Vercel**).
 
-### Step 6: Migrate Your Data (5 mins)
-1. In your project folder, run:
-   ```bash
-   npm run migrate
-   ```
-   This reads your Excel file and populates Supabase with all customers, orders, inventory, etc.
+**Required:** `NEXT_PUBLIC_SUPABASE_*`, `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`, `OFFICE_GOOGLE_ALLOWED_DOMAINS`
 
-## What Each Route Does
+**Optional:** `GOOGLE_MAPS_API_KEY`, Twilio, Stripe, `CRON_SECRET`, `MONITORING_WEBHOOK_URL`
 
-| URL | Purpose | Login |
-|-----|---------|-------|
-| `/` | Office dashboard (dispatch, booking, weighbridge, reports) | Supabase Auth (set up separately) |
-| `/driver` | Driver mobile app (jobs, clock in/out, photos) | PIN + lorry selection |
-| `/portal` | Customer portal (order history, request collections) | 4-digit PIN |
-| `/tablet` | Yard time clock | PIN |
-| `/api/documents` | WTN/DTN document generation | API key |
-| `/api/reports` | CSV export (SEPA, Finance, etc.) | API key |
-| `/api/sms` | Twilio SMS integration | API key |
-| `/api/admin` | Archival & analytics | API key |
+---
 
-## Testing Locally First (Optional)
-
-Before deploying to Vercel:
+## 3. Run locally
 
 ```bash
-cd enviroworx-cloud
 npm install
 npm run dev
 ```
 
-Opens at `http://localhost:3000`
+Open `http://localhost:3000/office/login`
 
-## Data After Migration
+---
 
-Your Excel file will be imported with:
-- **1548** customers
-- **1020** orders
-- **1100** weight logs
-- **279** inventory skips
-- **8** drivers
-- **7** lorries
-- All pricing, waste codes, and config
+## 4. Deploy (Vercel)
 
-## Next Steps After Deployment
+1. Push `main` (after merging `cursor/office-google-auth`).
+2. Import repo in Vercel; add all env vars.
+3. Add `CRON_SECRET` — Vercel crons call `/api/cron/*` with `Authorization: Bearer <CRON_SECRET>`.
+4. Verify deploy: `GET https://YOUR-DOMAIN/api/health` → `"ok": true`.
 
-1. **Set up Supabase Auth** (optional, for office dashboard login)
-2. **Add Twilio credentials** (for SMS notifications)
-3. **Populate driver PINs** in database
-4. **Add customer portal PINs** for each customer
-5. **Configure Supabase Storage** for photo uploads
-6. **Enable email notifications** (Supabase Realtime emails)
+---
 
-## Monthly Cost Estimate
+## 5. Data migration (optional)
 
-| Component | Cost |
-|-----------|------|
-| Supabase (Pro) | £25-40 |
-| Vercel (Pro) | £20 |
-| Twilio SMS | £0.01-0.05 per message |
-| **Total** | **~£50-60/month** |
+If moving from Excel / Sheets:
 
-**Charge customer:** £150-250/month (3-5x margin, standard SaaS pricing)
-
-## Support & Troubleshooting
-
-**Common Issues:**
-
-| Issue | Fix |
-|-------|-----|
-| "NEXT_PUBLIC_SUPABASE_URL not set" | Check .env.local file |
-| "Duplicate key error on customers" | Customer names aren't unique — SQL enforces this |
-| "SMS not sending" | Add Twilio credentials to .env |
-| "Photos won't upload" | Enable Supabase Storage in dashboard |
-
-## Files Reference
-
-```
-enviroworx-cloud/
-├── src/
-│   ├── app/
-│   │   ├── page.tsx                 (office dashboard)
-│   │   ├── driver/page.tsx          (driver app)
-│   │   ├── portal/page.tsx          (customer portal)
-│   │   ├── tablet/page.tsx          (yard clock)
-│   │   ├── api/
-│   │   │   ├── documents/route.ts   (WTN/DTN)
-│   │   │   ├── reports/route.ts     (CSV export)
-│   │   │   ├── sms/route.ts         (Twilio)
-│   │   │   └── admin/route.ts       (archives)
-│   ├── lib/
-│   │   ├── api.ts                   (40+ business logic functions)
-│   │   ├── supabase.ts              (DB client)
-│   │   └── config.ts                (pricing, waste codes, etc.)
-├── supabase/
-│   ├── migrations/
-│   │   └── 001_schema.sql           (database tables, views, functions)
-│   └── seed/
-│       └── migrate_from_sheets.ts   (Excel → Supabase)
-└── SCHEMA_FOR_PASTING.sql           (ready-to-paste SQL)
+```bash
+npm run migrate
 ```
 
 ---
 
-**You're 88% done.** Just apply the schema, set environment variables, and deploy. Good luck! 🚀
+## 6. PIN setup
+
+In Supabase Table Editor:
+
+- `drivers.pin` — each driver (4 digits)
+- `customers.portal_pin` — each portal customer
+- `yard_staff.pin` — yard clock
+
+---
+
+## Troubleshooting
+
+| Issue | Fix |
+|-------|-----|
+| Office redirect loop | Google allowlist + `office_staff` row + Supabase redirect URL |
+| Empty Customers/Reports | Sign in to office; data loads via server actions |
+| Maps autocomplete | Enable Places API; set `GOOGLE_MAPS_API_KEY` |
+| SEPA Drive sync fails | Google Drive API credentials in `drive` actions |
+| Driver photo fail | Create `job-photos` storage bucket |
+| Portal pay fails | Stripe keys + webhook to `/api/stripe/webhook` |
+
+---
+
+## Monthly cost (estimate)
+
+Supabase Pro + Vercel Pro + SMS usage ≈ **£50–80/month** (excluding Stripe fees).

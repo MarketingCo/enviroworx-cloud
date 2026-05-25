@@ -2,8 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyCronAuth } from '@/lib/auth'
-import { supabaseAdmin, safeActivityLog } from '@/lib/supabase'
-import { logToDrive } from '@/app/actions/drive'
+import { runMonthlySepaDriveSync } from '@/lib/monthly-sepa-drive-sync'
 
 export async function GET(req: NextRequest) {
   if (!verifyCronAuth(req)) {
@@ -15,43 +14,21 @@ export async function GET(req: NextRequest) {
     const customEnd = searchParams.get('end')
 
     const today = new Date()
-    // Default to previous month if no params provided
-    const start = customStart ? new Date(customStart).toISOString() : new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString()
-    const end = customEnd ? new Date(customEnd).toISOString() : new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59).toISOString()
+    const startStr = customStart
+      ? customStart
+      : new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().split('T')[0]
+    const endStr = customEnd
+      ? customEnd
+      : new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0]
 
-    // Use the v_unpaid_invoices view which aggregates Orders AND Cash Logs
-    const { data: unpaidInvoices, error: vError } = await supabaseAdmin
-      .from('v_unpaid_invoices')
-      .select('*')
-      .gte('date', start.split('T')[0])
-      .lte('date', end.split('T')[0])
-
-    if (!unpaidInvoices || unpaidInvoices.length === 0) {
-      return NextResponse.json({ message: 'No unpaid invoices for previous month. SEPA Sheets not updated.' })
+    const result = await runMonthlySepaDriveSync(startStr, endStr)
+    if (!result.success) {
+      return NextResponse.json({ message: result.message ?? 'Sync failed' })
     }
-
-    for (const inv of unpaidInvoices) {
-      await logToDrive({
-        date: inv.date || '',
-        ticketNumber: inv.skip_id || 'N/A',
-        customerName: inv.customer_name || 'Unknown',
-        address: inv.address || 'N/A',
-        amountPaid: 0, // Invoices in this view are unpaid
-        costGross: inv.amount || 0,
-        paymentMethod: 'Invoice',
-        sheetName: 'SEPA'
-      });
-    }
-
-    await safeActivityLog({
-      type: 'SYS',
-      message: `Monthly SEPA Compliance Logged to Google Drive: ${unpaidInvoices.length} items.`,
-      status: 'Completed'
-    })
-
-    return NextResponse.json({ success: true, count: unpaidInvoices.length })
-  } catch (error: any) {
+    return NextResponse.json({ success: true, count: result.count })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
     console.error('SEPA Sheets Cron Error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

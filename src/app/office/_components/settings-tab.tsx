@@ -248,7 +248,7 @@ export function SettingsTab() {
         <SectionHeader title="Office access (Google)" />
         <p className="text-xs text-slate-500 mt-2 mb-4 leading-relaxed">
           Staff listed in Supabase <code className="text-slate-400">office_staff</code> get roles after Google
-          sign-in. Add rows in the SQL editor or Table Editor — see{' '}
+          sign-in. Handover checklist: <code className="text-slate-400">docs/HANDOVER.md</code> · daily use:{' '}
           <code className="text-slate-400">docs/STAFF_GUIDE.md</code>.
         </p>
         {officeStaff.length === 0 ? (

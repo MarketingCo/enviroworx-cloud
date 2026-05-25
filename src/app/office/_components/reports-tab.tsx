@@ -6,7 +6,11 @@ import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
 import toast from 'react-hot-toast'
 import KmlSyncButton from '@/components/KmlSyncButton'
 import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, FileSpreadsheet, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, DollarSign, Settings, Trash2 } from 'lucide-react'
-import { generateReportAction, getOpsSummaryAction } from '@/app/actions/office-data'
+import {
+  generateReportAction,
+  getOpsSummaryAction,
+  runMonthlySepaDriveSyncAction,
+} from '@/app/actions/office-data'
 import { assignDriverToJobAction, autoAssignJobsAction, processBookingAction, logActiveTipperAction, processWeightLogAction, markJobPaidAction, cancelBookingAction, updateDriverPinAction, updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
 
 import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
@@ -58,15 +62,14 @@ export function ReportsTab() {
   async function handleDriveSync() {
     setLoading('DRIVE')
     try {
-      const res = await fetch(`/api/cron/monthly-sepa?start=${startDate}&end=${endDate}`)
-      const data = await res.json()
+      const data = await runMonthlySepaDriveSyncAction(startDate, endDate)
       if (data.success) {
-        toast.success(`Synced ${data.count} items to Google Drive!`)
+        toast.success(`Synced ${data.count ?? 0} items to Google Drive!`)
       } else {
         toast.error(data.message || 'No data found for sync')
       }
-    } catch (e: any) {
-      toast.error('Sync failed: ' + e.message)
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Sync failed')
     }
     setLoading(null)
   }

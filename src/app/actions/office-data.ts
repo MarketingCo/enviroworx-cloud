@@ -346,6 +346,12 @@ export async function mergeCustomersAction(primaryId: string, duplicateIds: stri
   }
 }
 
+export async function runMonthlySepaDriveSyncAction(startDate: string, endDate: string) {
+  await assertOffice()
+  const { runMonthlySepaDriveSync } = await import('@/lib/monthly-sepa-drive-sync')
+  return runMonthlySepaDriveSync(startDate, endDate)
+}
+
 export async function getOpsSummaryAction(startDate: string, endDate: string) {
   await assertOffice()
   const end = endDate.includes('T') ? endDate : `${endDate}T23:59:59`
