@@ -26,7 +26,7 @@ They can view orders, weighbridge history, request collections, and pay outstand
 
 ## Yard tablet (`/tablet`)
 
-Yard staff clock in/out with name + PIN (yard_staff table).
+Yard staff clock in/out with name + PIN (uses dedicated tablet auth — works even when office PIN is disabled).
 
 ## If something breaks
 

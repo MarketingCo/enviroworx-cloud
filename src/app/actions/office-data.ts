@@ -58,7 +58,7 @@ export async function getCustomerTimelineAction(customerName: string) {
   const name = customerName.trim()
   const pattern = `%${name}%`
 
-  const [{ data: orders }, { data: cashLogs }] = await Promise.all([
+  const [{ data: orders }, { data: openOrders }, { data: cashLogs }] = await Promise.all([
     supabaseAdmin
       .from('orders')
       .select('*')
@@ -66,6 +66,13 @@ export async function getCustomerTimelineAction(customerName: string) {
       .eq('status', 'Completed')
       .order('date', { ascending: false })
       .limit(50),
+    supabaseAdmin
+      .from('orders')
+      .select('id, date, job_type, skip_size, address, status, driver_name')
+      .ilike('customer_name', pattern)
+      .in('status', ['Booked', 'Assigned', 'Out for Delivery', 'On Site'])
+      .order('date', { ascending: true })
+      .limit(20),
     supabaseAdmin
       .from('cash_log')
       .select('*')
@@ -111,7 +118,14 @@ export async function getCustomerTimelineAction(customerName: string) {
     }
   })
 
-  return { customer: name, totalSpend, outstandingBalance, jobs, tips }
+  return {
+    customer: name,
+    totalSpend,
+    outstandingBalance,
+    openOrders: openOrders ?? [],
+    jobs,
+    tips,
+  }
 }
 
 export async function generateReportAction(type: string, startDate: string, endDate: string) {
@@ -396,4 +410,84 @@ export async function getOpsSummaryAction(startDate: string, endDate: string) {
     openJobs: openJobs ?? 0,
     unpaidInvoices: unpaidCount ?? 0,
   }
+}
+
+export type SetupCheck = { id: string; label: string; ok: boolean; detail: string }
+
+/** Pre-handover system checklist for Settings tab */
+export async function getSetupStatusAction(): Promise<SetupCheck[]> {
+  await assertOffice()
+
+  const checks: SetupCheck[] = []
+
+  const { error: dbErr } = await supabaseAdmin.from('config').select('key').limit(1)
+  checks.push({
+    id: 'database',
+    label: 'Database connected',
+    ok: !dbErr,
+    detail: dbErr ? dbErr.message : 'Supabase reachable',
+  })
+
+  const { count: staffCount } = await supabaseAdmin
+    .from('office_staff')
+    .select('id', { count: 'exact', head: true })
+    .eq('active', true)
+
+  const hasDomainAllowlist = Boolean(process.env.OFFICE_GOOGLE_ALLOWED_DOMAINS?.trim())
+  checks.push({
+    id: 'office_auth',
+    label: 'Office Google access',
+    ok: (staffCount ?? 0) > 0 || hasDomainAllowlist,
+    detail:
+      (staffCount ?? 0) > 0
+        ? `${staffCount} staff in office_staff`
+        : hasDomainAllowlist
+          ? 'Domain allowlist configured'
+          : 'Add office_staff rows or OFFICE_GOOGLE_ALLOWED_DOMAINS',
+  })
+
+  checks.push({
+    id: 'session',
+    label: 'Session secret',
+    ok: Boolean(process.env.SESSION_SECRET || process.env.CRON_SECRET),
+    detail: 'Required for driver/portal/tablet PIN sessions',
+  })
+
+  checks.push({
+    id: 'maps',
+    label: 'Google Maps / Places',
+    ok: Boolean(process.env.GOOGLE_MAPS_API_KEY),
+    detail: 'Address autocomplete on bookings',
+  })
+
+  checks.push({
+    id: 'twilio',
+    label: 'SMS (Twilio)',
+    ok: Boolean(
+      process.env.TWILIO_ACCOUNT_SID &&
+        process.env.TWILIO_AUTH_TOKEN &&
+        process.env.TWILIO_FROM_NUMBER
+    ),
+    detail: 'Driver on-site texts & collection reminders',
+  })
+
+  checks.push({
+    id: 'stripe',
+    label: 'Stripe payments',
+    ok: Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET),
+    detail: 'Customer portal pay-invoices',
+  })
+
+  const { count: driverCount } = await supabaseAdmin
+    .from('drivers')
+    .select('id', { count: 'exact', head: true })
+
+  checks.push({
+    id: 'drivers',
+    label: 'Drivers configured',
+    ok: (driverCount ?? 0) > 0,
+    detail: `${driverCount ?? 0} drivers in database`,
+  })
+
+  return checks
 }

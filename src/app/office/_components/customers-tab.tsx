@@ -199,6 +199,24 @@ export function CustomersTab() {
             </div>
           </div>
 
+          {/* Open jobs */}
+          {timeline.openOrders?.length > 0 && (
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-5">
+              <SectionHeader title={`Active jobs (${timeline.openOrders.length})`} />
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {timeline.openOrders.map((o: { id: string; date: string; job_type: string; skip_size: string; address: string; status: string }) => (
+                  <div key={o.id} className="flex justify-between text-sm border-b border-white/5 pb-2">
+                    <div>
+                      <p className="text-white">{o.date} · {o.job_type} · {o.skip_size}yd</p>
+                      <p className="text-xs text-slate-500">{o.address}</p>
+                    </div>
+                    <Badge label={o.status} color={statusColor(o.status)} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Jobs */}
           {timeline.jobs?.length > 0 && (
             <div className="bg-slate-900 border border-white/5 rounded-xl p-5">

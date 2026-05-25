@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "migrate": "npx ts-node supabase/seed/migrate_from_sheets.ts",
     "sync-kml": "npx ts-node src/scripts/import-kml.ts"
   },

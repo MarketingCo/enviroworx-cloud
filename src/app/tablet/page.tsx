@@ -90,7 +90,7 @@ export default function TabletApp() {
     const action = clockedIn ? 'OUT' : 'IN'
 
     try {
-      const authRes = await fetch('/api/auth/office', {
+      const authRes = await fetch('/api/auth/tablet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: selectedName, pin }),

@@ -8,7 +8,7 @@ import KmlSyncButton from '@/components/KmlSyncButton'
 import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, DollarSign, Settings, Trash2 } from 'lucide-react'
 import { getDashboardStats, getDispatchJobs, getStoredTare, searchCustomers, getCustomerTimeline, generateReport, getSkipUtilization, getLorries, getDriversList, getCustomPricingList } from '@/lib/api'
 import { assignDriverToJobAction, autoAssignJobsAction, processBookingAction, logActiveTipperAction, processWeightLogAction, markJobPaidAction, cancelBookingAction, updateDriverPinAction, updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
-import { listOfficeStaffAction } from '@/app/actions/office-data'
+import { listOfficeStaffAction, getSetupStatusAction } from '@/app/actions/office-data'
 
 import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
 
@@ -27,19 +27,24 @@ export function SettingsTab() {
   const [officeStaff, setOfficeStaff] = useState<
     { id: string; email: string; display_name: string | null; role: string; active: boolean }[]
   >([])
+  const [setupChecks, setSetupChecks] = useState<
+    { id: string; label: string; ok: boolean; detail: string }[]
+  >([])
 
   async function load() {
     setLoading(true)
-    const [{ data }, rates, staff] = await Promise.all([
+    const [{ data }, rates, staff, checks] = await Promise.all([
       supabase.from('config').select('*'),
       getCustomPricingList(),
       listOfficeStaffAction().catch(() => []),
+      getSetupStatusAction().catch(() => []),
     ])
     const cfg: any = {}
     data?.forEach(row => { cfg[row.key] = row.value })
     setConfig(cfg)
     setCustomRates(rates)
     setOfficeStaff(staff as typeof officeStaff)
+    setSetupChecks(checks)
     setLoading(false)
   }
 
@@ -84,6 +89,28 @@ export function SettingsTab() {
 
   return (
     <div className="space-y-10 max-w-6xl animate-in fade-in slide-in-from-bottom-2 duration-500">
+      {setupChecks.length > 0 && (
+        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6">
+          <SectionHeader title="System readiness" />
+          <ul className="mt-4 grid sm:grid-cols-2 gap-3">
+            {setupChecks.map((c) => (
+              <li
+                key={c.id}
+                className={`flex items-start gap-3 p-3 rounded-lg border ${
+                  c.ok ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-amber-500/30 bg-amber-500/5'
+                }`}
+              >
+                <span className="text-lg">{c.ok ? '✓' : '!'}</span>
+                <div>
+                  <p className="text-sm font-bold text-white">{c.label}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{c.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
         {/* Skip Prices */}
         <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl">
