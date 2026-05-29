@@ -20,6 +20,7 @@ const envChecks = [
   ['SESSION_SECRET', Boolean(process.env.SESSION_SECRET || process.env.CRON_SECRET)],
   ['OFFICE_GOOGLE_ALLOWED_DOMAINS', Boolean(process.env.OFFICE_GOOGLE_ALLOWED_DOMAINS?.trim())],
   ['GOOGLE_MAPS_API_KEY', Boolean(process.env.GOOGLE_MAPS_API_KEY)],
+  ['NEXT_PUBLIC_GOOGLE_MAPS_API_KEY', Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)],
   ['STRIPE_SECRET_KEY', Boolean(process.env.STRIPE_SECRET_KEY)],
   ['STRIPE_WEBHOOK_SECRET', Boolean(process.env.STRIPE_WEBHOOK_SECRET)],
   ['CRON_SECRET', Boolean(process.env.CRON_SECRET)],

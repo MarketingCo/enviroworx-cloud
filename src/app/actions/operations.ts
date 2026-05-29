@@ -57,6 +57,35 @@ export async function logActiveTipperAction(
   )
 }
 
+export async function placeSkipOnMapAction(
+  form: Parameters<typeof server.placeSkipOnMap>[0]
+) {
+  return withOfficeAction(
+    {
+      type: 'skip.place',
+      message: `Placed ${form.skipSize}yd skip${form.customerName ? ` for ${form.customerName}` : ''}`,
+      entityType: 'inventory',
+      entityId: form.skipId,
+      metadata: { skipSize: form.skipSize, address: form.address },
+    },
+    () => server.placeSkipOnMap(form)
+  )
+}
+
+export async function moveSkipLocationAction(id: string, latitude: number, longitude: number) {
+  return withOfficeAction(
+    { type: 'skip.move', message: 'Moved skip pin', entityType: 'inventory', entityId: id },
+    () => server.moveSkipLocation(id, latitude, longitude)
+  )
+}
+
+export async function collectSkipFromMapAction(id: string) {
+  return withOfficeAction(
+    { type: 'skip.collect', message: 'Collected skip', entityType: 'inventory', entityId: id },
+    () => server.collectSkipFromMap(id)
+  )
+}
+
 export async function processWeightLogAction(
   form: Parameters<typeof server.processWeightLog>[0]
 ) {

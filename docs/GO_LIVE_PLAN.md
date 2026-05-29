@@ -129,7 +129,8 @@ Must show `✓ Google appears enabled`. (Before this, it shows `✗ Google NOT e
 ## Phase 3 — Environment variables
 
 **3.1 👤 Fetch the keys Iain wants live:**
-- **`GOOGLE_MAPS_API_KEY`** — Google Cloud Console → enable **Places API** + **Geocoding API**, create an API key. Powers address autocomplete in new bookings. *(Recommended.)*
+- **`GOOGLE_MAPS_API_KEY`** — Google Cloud Console → enable **Places API** + **Geocoding API**, create an API key. Powers address autocomplete in new bookings. Keep this key **server-side only** (no referrer restriction needed; it's never sent to the browser). *(Recommended.)*
+- **`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`** — a **separate** key for the office Skip Map. In Google Cloud Console: enable **Maps JavaScript API** on it, then under the key's **Application restrictions** set **HTTP referrers** to your domains (`https://enviroworx-cloud.vercel.app/*` and `http://localhost:3000/*`). This key is exposed to the browser, so the referrer lock is what protects it. *(Required for the map to render.)*
 - **`STRIPE_SECRET_KEY`** + **`STRIPE_WEBHOOK_SECRET`** — Stripe dashboard. Only needed if customers pay through `/portal` now. *(Optional — can defer.)*
 - **`TWILIO_*`** — only if driver SMS is going live now. *(Optional.)*
 
