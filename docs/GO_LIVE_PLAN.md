@@ -20,6 +20,21 @@
 
 ---
 
+## Decisions (locked — do NOT change these)
+
+- **Office login = Google only**, restricted to two accounts:
+  - `accounts@enviroworx.co.uk` → role `admin`
+  - `info@enviroworx.co.uk` → role `office`
+  These are exactly the defaults already in `scripts/seed-office-staff.mjs` — do not edit the script.
+- **Driver login stays name + lorry + 4-digit PIN.** Do **not** convert drivers to
+  email/password — it was considered and rejected (in-cab usability + the offline
+  job queue depends on the current PIN/JWT session). Leave
+  `src/app/api/auth/driver/route.ts` and the `/driver` login flow as they are.
+  The only driver task is data: give **each driver their own unique 4-digit PIN**
+  in Supabase → Table Editor → `drivers.pin`.
+
+---
+
 ## Phase 0 — Baseline & repo hygiene 🤖
 
 **0.1 Confirm where we are.**
