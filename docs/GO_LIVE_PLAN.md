@@ -35,6 +35,26 @@
 
 ---
 
+## 👤 Iain's manual checklist (everything the AI cannot do)
+
+These are the dashboard / account tasks no AI can do for you — they need your logins and your billing. Everything else is automated. Each links to the phase with full detail.
+
+- [ ] **Google sign-in** — create OAuth client in Google Cloud + enable Google provider in Supabase, set redirect URLs. *(Phase 2 — the #1 blocker.)*
+- [ ] **Seed-then-confirm office accounts** — the AI seeds `accounts@enviroworx.co.uk` (admin) + `info@enviroworx.co.uk` (office); you just confirm those are the right two. *(Phase 1.3.)*
+- [ ] **`job-photos` storage bucket** — create in Supabase → Storage. *(Phase 1.5.)*
+- [ ] **Skip Map migration** — paste `supabase/migrations/20260529000000_inventory_geo.sql` into the Supabase SQL Editor. *(Phase 1.6.)*
+- [ ] **Two Google Maps keys** *(Phase 3.1)*:
+  - `GOOGLE_MAPS_API_KEY` — server-side, enable **Places + Geocoding API** (booking address autocomplete).
+  - `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` — **separate** browser key, enable **Maps JavaScript API**, lock to HTTP referrers `https://enviroworx-cloud.vercel.app/*` + `http://localhost:3000/*` (the Skip Map).
+- [ ] **Optional keys** — `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` (only if `/portal` payments go live now), `TWILIO_*` (only if driver SMS goes live now). *(Phase 3.1.)*
+- [ ] **Set the PINs** in Supabase Table Editor — a **unique 4-digit** `drivers.pin` per driver, plus `customers.portal_pin` and `yard_staff.pin`. *(Decisions + Phase 5.)*
+- [ ] **Review & merge the PR** the AI opens. *(Phase 4.2.)*
+- [ ] **Run the smoke test** — ~15 min, you drive. *(Phase 5.)*
+
+> Hand the rest to the AI: repo cleanup, env-var syncing to Vercel, seeding office staff, opening the PR, health checks, and all verification (`npm run preflight`). After each of your steps above, tell the AI and it will verify.
+
+---
+
 ## Phase 0 — Baseline & repo hygiene 🤖
 
 **0.1 Confirm where we are.**
@@ -95,6 +115,14 @@ node scripts/seed-office-staff.mjs
 **✅ 1.4** `npm run preflight` now shows `✓ office_staff (N active)`.
 
 **1.5 👤 Storage bucket** (needed for driver job photos). Iain creates a bucket named **`job-photos`** in Supabase → Storage (public read if drivers share proof URLs). Reference: `docs/HANDOVER.md` §1.A.2.
+
+**1.6 👤 Run the Skip Map migration** (needed for the office Skip Map to show pins). The `inventory` table originally had **no latitude/longitude columns**, so the map's skip layer rendered nothing — this migration adds them. Iain runs it in the Supabase SQL Editor:
+- Open https://supabase.com/dashboard/project/iuodjkeygsqthlpfjkwj/sql
+- Paste and run the contents of `supabase/migrations/20260529000000_inventory_geo.sql`.
+
+> This is the database half of the Skip Map feature. The browser key half is Phase 3.1 (`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`). **Both** are required before pins will drop. Until then the Skip Map tab shows a tidy "Map not configured" message rather than breaking.
+
+**✅ 1.7 🤖** `npm run preflight` now shows `✓ inventory geo columns (Skip Map ready)`. (Before the migration it shows `✗ inventory.latitude/longitude missing`.)
 
 ---
 
@@ -182,6 +210,7 @@ Use the checklist already in `docs/HANDOVER.md` §3. Minimum to call it live:
 - [ ] `/office/login` → "Continue with Google" → dashboard loads with real numbers.
 - [ ] Office → Customers search → open a timeline.
 - [ ] Office → New booking → address autocomplete works (proves `GOOGLE_MAPS_API_KEY`).
+- [ ] Office → **Skip Map** → real Google map loads (proves `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` + Phase 1.6 migration). Click empty map → "Place a skip" panel → drop a skip → pin appears. Drag the pin → it saves. Click pin → contact phone is tappable → "Mark collected" clears it.
 - [ ] Office → Dispatch → assign a driver.
 - [ ] Office → Sign out works.
 - [ ] `/driver` → PIN login → clock in → photo → complete a job.
@@ -213,7 +242,7 @@ There are 3 open Dependabot PRs. Handle in this order, each on its own and verif
 | Yard tablet | `/tablet` | Yard staff PIN | `yard_staff.pin` |
 
 ## Definition of done
-- `npm run preflight` shows ✓ for: all env, **Google enabled**, **office_staff ≥1**, db tables, production health.
+- `npm run preflight` shows ✓ for: all env, **Google enabled**, **office_staff ≥1**, db tables, **inventory geo columns**, production health.
 - `curl .../api/health` → `ok:true`.
 - Iain can sign into `/office` with Google and see the dashboard.
 - Go-live branch merged to `main`; large files no longer tracked.

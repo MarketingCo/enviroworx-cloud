@@ -67,6 +67,14 @@ if (svc) {
 
   const { count: customers } = await admin.from('customers').select('id', { count: 'exact', head: true })
   console.log(customers ? `✓ customers (${customers})` : '✗ no customers')
+
+  // Skip Map: inventory must have lat/lng columns (migration 20260529000000_inventory_geo.sql)
+  const { error: geoErr } = await admin.from('inventory').select('latitude,longitude').limit(1)
+  console.log(
+    geoErr
+      ? '✗ inventory.latitude/longitude missing — run migration 20260529000000_inventory_geo.sql (Skip Map will show no pins)'
+      : '✓ inventory geo columns (Skip Map ready)'
+  )
 } else {
   console.log('\n✗ SUPABASE_SERVICE_ROLE_KEY missing — server actions / office data will fail')
 }
