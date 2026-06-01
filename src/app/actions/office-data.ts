@@ -1,6 +1,7 @@
 'use server'
 
 import { requireOfficeSession } from '@/lib/session'
+import { getSessionSecret } from '@/lib/env'
 import { supabaseAdmin } from '@/lib/supabase'
 import { DEFAULT_CONFIG } from '@/lib/config'
 import { writeAudit, auditFromSession } from '@/lib/audit'
@@ -449,7 +450,7 @@ export async function getSetupStatusAction(): Promise<SetupCheck[]> {
   checks.push({
     id: 'session',
     label: 'Session secret',
-    ok: Boolean(process.env.SESSION_SECRET || process.env.CRON_SECRET),
+    ok: Boolean(getSessionSecret()),
     detail: 'Required for driver/portal/tablet PIN sessions',
   })
 

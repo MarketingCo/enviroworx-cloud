@@ -241,6 +241,82 @@ export async function processBooking(form: {
 }
 
 // ============================================================
+// SKIP MAP — place / move / collect a skip pin on the office map
+// (inventory rows carry latitude/longitude; see migration 20260529000000)
+// ============================================================
+
+/** Drop or update a skip pin at given coordinates. Upserts by skip_id. */
+export async function placeSkipOnMap(form: {
+  skipId?: string
+  skipSize: string
+  customerName: string
+  customerPhone?: string
+  address?: string
+  latitude: number
+  longitude: number
+  deliveryDate?: string
+  comments?: string
+}) {
+  if (!form.skipSize) return { success: false, message: '❌ Select a skip size' }
+  if (typeof form.latitude !== 'number' || typeof form.longitude !== 'number') {
+    return { success: false, message: '❌ Missing map location' }
+  }
+
+  // Reuse an existing skip number if given, otherwise generate a stable one.
+  const skipId =
+    form.skipId?.trim() ||
+    `MAP-${form.skipSize}-${Date.now().toString(36).toUpperCase()}`
+
+  const { error } = await supabase.from('inventory').upsert(
+    {
+      skip_id: skipId,
+      skip_size: form.skipSize,
+      customer_name: form.customerName?.trim() || null,
+      customer_phone: form.customerPhone?.trim() || null,
+      delivery_address: form.address?.trim() || null,
+      delivery_date: form.deliveryDate || new Date().toISOString(),
+      latitude: form.latitude,
+      longitude: form.longitude,
+      comments: form.comments?.trim() || null,
+      status: 'In Use' as any,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'skip_id' }
+  )
+
+  if (error) throw error
+  return { success: true, skipId, message: `📍 Skip ${skipId} placed` }
+}
+
+/** Reposition an existing skip pin (used when a marker is dragged). */
+export async function moveSkipLocation(id: string, latitude: number, longitude: number) {
+  const { error } = await supabase
+    .from('inventory')
+    .update({ latitude, longitude, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
+  return { success: true }
+}
+
+/** Mark a skip collected — clears it off the map and frees it. */
+export async function collectSkipFromMap(id: string) {
+  const { error } = await supabase
+    .from('inventory')
+    .update({
+      status: 'Available' as any,
+      latitude: null,
+      longitude: null,
+      customer_name: null,
+      customer_phone: null,
+      delivery_address: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+  if (error) throw error
+  return { success: true, message: '✅ Skip collected' }
+}
+
+// ============================================================
 // WEIGHBRIDGE (replaces processWeightLog + logActiveTipper)
 // ============================================================
 
