@@ -47,3 +47,12 @@ dev_output.txt
 package-lock 2.json
 /next
 /enviroworx-cloud@1.0.0
+
+# Local data / scratch (added during go-live cleanup)
+*.xlsx
+*.kml
+build_log.txt
+dev_output.txt
+package-lock 2.json
+/next
+/enviroworx-cloud@1.0.0
