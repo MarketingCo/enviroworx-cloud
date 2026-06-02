@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import type { NextRequest } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { getSessionSecret } from '@/lib/env'
 import { isOfficeGoogleEmailAllowed, officePinAuthEnabled } from '@/lib/office-google'
 import { lookupOfficeStaff, type OfficeStaffRole } from '@/lib/office-staff'
 
@@ -19,8 +20,7 @@ const COOKIE_NAME = 'ew_session'
 
 function getSecret() {
   const raw =
-    process.env.SESSION_SECRET ||
-    process.env.CRON_SECRET ||
+    getSessionSecret() ||
     (process.env.NODE_ENV === 'development' ? 'dev-only-change-in-production' : '')
   if (!raw) {
     throw new Error('SESSION_SECRET or CRON_SECRET must be set in production')

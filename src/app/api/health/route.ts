@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { getSessionSecret, getSupabaseServiceRoleKey, hasSupabasePublicConfig } from '@/lib/env'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -7,11 +8,12 @@ export const dynamic = 'force-dynamic'
  * Public health check for uptime monitors (no secrets in response).
  */
 export async function GET() {
+  const serviceKey = getSupabaseServiceRoleKey()
   const checks: Record<string, boolean> = {
-    supabase_url: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
-    supabase_anon: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-    service_role: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-    session_secret: Boolean(process.env.SESSION_SECRET || process.env.CRON_SECRET),
+    supabase_url: hasSupabasePublicConfig(),
+    supabase_anon: hasSupabasePublicConfig(),
+    service_role: Boolean(serviceKey),
+    session_secret: Boolean(getSessionSecret()),
     db: false,
   }
 
