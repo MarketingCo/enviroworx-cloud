@@ -17,13 +17,13 @@ function normalizeCustomerName(name: string) {
     .trim()
 }
 
-/** Office reads use service role so RLS never blocks the operations UI. */
+/** Office reads use service role so RLS never blocks the operations UI. Returns the session. */
 async function assertOffice() {
-  await requireOfficeSession()
+  return requireOfficeSession()
 }
 
 export async function searchCustomersAction(query: string) {
-  await assertOffice()
+  const session = await assertOffice()
   const q = query.trim()
   if (q.length < 2) return []
 
@@ -31,6 +31,7 @@ export async function searchCustomersAction(query: string) {
   const { data, error } = await supabaseAdmin
     .from('customers')
     .select('id, name, phone, billing_address, account_balance, updated_at')
+    .eq('tenant_id', session.tenantId)
     .ilike('name', `%${escaped}%`)
     .order('name')
     .limit(20)
@@ -43,10 +44,11 @@ export async function searchCustomersAction(query: string) {
 }
 
 export async function listCustomersAction(limit = 50) {
-  await assertOffice()
+  const session = await assertOffice()
   const { data, error } = await supabaseAdmin
     .from('customers')
     .select('id, name, phone, billing_address, account_balance, updated_at')
+    .eq('tenant_id', session.tenantId)
     .order('name')
     .limit(limit)
 
@@ -55,7 +57,7 @@ export async function listCustomersAction(limit = 50) {
 }
 
 export async function getCustomerTimelineAction(customerName: string) {
-  await assertOffice()
+  const session = await assertOffice()
   const name = customerName.trim()
   const pattern = `%${name}%`
 
@@ -63,6 +65,7 @@ export async function getCustomerTimelineAction(customerName: string) {
     supabaseAdmin
       .from('orders')
       .select('*')
+      .eq('tenant_id', session.tenantId)
       .ilike('customer_name', pattern)
       .eq('status', 'Completed')
       .order('date', { ascending: false })
@@ -70,6 +73,7 @@ export async function getCustomerTimelineAction(customerName: string) {
     supabaseAdmin
       .from('orders')
       .select('id, date, job_type, skip_size, address, status, driver_name')
+      .eq('tenant_id', session.tenantId)
       .ilike('customer_name', pattern)
       .in('status', ['Booked', 'Assigned', 'Out for Delivery', 'On Site'])
       .order('date', { ascending: true })
@@ -77,6 +81,7 @@ export async function getCustomerTimelineAction(customerName: string) {
     supabaseAdmin
       .from('cash_log')
       .select('*')
+      .eq('tenant_id', session.tenantId)
       .ilike('customer_name', pattern)
       .order('logged_at', { ascending: false })
       .limit(50),
@@ -130,7 +135,7 @@ export async function getCustomerTimelineAction(customerName: string) {
 }
 
 export async function generateReportAction(type: string, startDate: string, endDate: string) {
-  await assertOffice()
+  const session = await assertOffice()
   const end = endDate.includes('T') ? endDate : `${endDate}T23:59:59`
 
   switch (type) {
@@ -138,6 +143,7 @@ export async function generateReportAction(type: string, startDate: string, endD
       const { data, error } = await supabaseAdmin
         .from('weight_logs')
         .select('*')
+        .eq('tenant_id', session.tenantId)
         .gte('logged_at', startDate)
         .lte('logged_at', end)
         .order('logged_at')
@@ -148,6 +154,7 @@ export async function generateReportAction(type: string, startDate: string, endD
       const { data, error } = await supabaseAdmin
         .from('cash_log')
         .select('*')
+        .eq('tenant_id', session.tenantId)
         .gte('logged_at', startDate)
         .lte('logged_at', end)
         .order('logged_at')
@@ -158,6 +165,7 @@ export async function generateReportAction(type: string, startDate: string, endD
       const { data, error } = await supabaseAdmin
         .from('inventory')
         .select('*')
+        .eq('tenant_id', session.tenantId)
         .in('status', ['Delivered', 'In Use'])
       if (error) throw new Error(error.message)
       return data ?? []
@@ -166,18 +174,11 @@ export async function generateReportAction(type: string, startDate: string, endD
       const { data, error } = await supabaseAdmin
         .from('orders')
         .select('*')
+        .eq('tenant_id', session.tenantId)
         .gte('date', startDate)
         .lte('date', endDate)
         .eq('status', 'Completed')
         .order('driver_name')
-      if (error) throw new Error(error.message)
-      return data ?? []
-    }
-    case 'UNPAID_INVOICES': {
-      const { data, error } = await supabaseAdmin
-        .from('v_unpaid_invoices')
-        .select('*')
-        .order('date')
       if (error) throw new Error(error.message)
       return data ?? []
     }
@@ -187,22 +188,24 @@ export async function generateReportAction(type: string, startDate: string, endD
 }
 
 export async function getInventoryAction() {
-  await assertOffice()
+  const session = await assertOffice()
   const { data, error } = await supabaseAdmin
     .from('inventory')
     .select('*')
+    .eq('tenant_id', session.tenantId)
     .order('skip_id')
   if (error) throw new Error(error.message)
   return data ?? []
 }
 
 export async function getDashboardStatsAction() {
-  await assertOffice()
+  const session = await assertOffice()
   const today = new Date().toISOString().split('T')[0]
   const weekStart = getWeekStart()
   const twoDaysAway = new Date()
   twoDaysAway.setDate(twoDaysAway.getDate() + 2)
   const expiryCutoff = twoDaysAway.toISOString().split('T')[0]
+  const tid = session.tenantId
 
   const [
     { count: completedToday },
@@ -217,17 +220,19 @@ export async function getDashboardStatsAction() {
     { data: expiringPermits },
     { data: revenueData },
   ] = await Promise.all([
-    supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'Completed').eq('date', today),
-    supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'Completed').gte('date', weekStart),
-    supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).in('status', ['Booked', 'Assigned']).gt('date', today),
-    supabaseAdmin.from('cash_log').select('id', { count: 'exact', head: true }).gte('logged_at', `${today}T00:00:00`),
+    supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('tenant_id', tid).eq('status', 'Completed').eq('date', today),
+    supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('tenant_id', tid).eq('status', 'Completed').gte('date', weekStart),
+    supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('tenant_id', tid).in('status', ['Booked', 'Assigned']).gt('date', today),
+    supabaseAdmin.from('cash_log').select('id', { count: 'exact', head: true }).eq('tenant_id', tid).gte('logged_at', `${today}T00:00:00`),
+    // Views below don't have tenant_id yet — they return data for all tenants.
+    // With a single tenant this is safe; update these views before adding tenant #2.
     supabaseAdmin.from('v_inventory_summary').select('*'),
-    supabaseAdmin.from('active_tippers').select('*').order('timestamp', { ascending: false }),
+    supabaseAdmin.from('active_tippers').select('*').eq('tenant_id', tid).order('timestamp', { ascending: false }),
     supabaseAdmin.from('v_unpaid_invoices').select('*').limit(100),
     supabaseAdmin.from('v_driver_hours_today').select('*'),
     supabaseAdmin.from('v_collections_due').select('*'),
-    supabaseAdmin.from('permits').select('*').lte('expiry_date', expiryCutoff).neq('status', 'Expired'),
-    supabaseAdmin.from('cash_log').select('cost_gross, net_weight, waste_type').gte('logged_at', `${today}T00:00:00`),
+    supabaseAdmin.from('permits').select('*').eq('tenant_id', tid).lte('expiry_date', expiryCutoff).neq('status', 'Expired'),
+    supabaseAdmin.from('cash_log').select('cost_gross, net_weight, waste_type').eq('tenant_id', tid).gte('logged_at', `${today}T00:00:00`),
   ])
 
   const totalRev = revenueData?.reduce((sum, r) => sum + (r.cost_gross || 0), 0) ?? 0
@@ -264,10 +269,11 @@ function getWeekStart() {
 }
 
 export async function getAuditLogAction(limit = 80) {
-  await assertOffice()
+  const session = await assertOffice()
   const { data, error } = await supabaseAdmin
     .from('activity_log')
     .select('id, type, message, status, actor_email, actor_name, entity_type, entity_id, created_at')
+    .eq('tenant_id', session.tenantId)
     .order('created_at', { ascending: false })
     .limit(limit)
 
@@ -285,10 +291,11 @@ export async function getOfficeSessionAction() {
 }
 
 export async function listOfficeStaffAction() {
-  await assertOffice()
+  const session = await assertOffice()
   const { data, error } = await supabaseAdmin
     .from('office_staff')
     .select('id, email, display_name, role, active')
+    .eq('tenant_id', session.tenantId)
     .order('email')
 
   if (error) throw new Error(error.message)
@@ -297,10 +304,11 @@ export async function listOfficeStaffAction() {
 
 /** Groups customers with similar normalized names (possible duplicates). */
 export async function findDuplicateCustomersAction() {
-  await assertOffice()
+  const session = await assertOffice()
   const { data, error } = await supabaseAdmin
     .from('customers')
     .select('id, name, phone, account_balance')
+    .eq('tenant_id', session.tenantId)
     .order('name')
     .limit(500)
 
@@ -376,7 +384,7 @@ export async function runMonthlySepaDriveSyncAction(startDate: string, endDate: 
 }
 
 export async function getOpsSummaryAction(startDate: string, endDate: string) {
-  await assertOffice()
+  const session = await assertOffice()
   const end = endDate.includes('T') ? endDate : `${endDate}T23:59:59`
 
   const [
@@ -388,20 +396,24 @@ export async function getOpsSummaryAction(startDate: string, endDate: string) {
     supabaseAdmin
       .from('cash_log')
       .select('cost_gross, net_weight, amount_paid, payment_method')
+      .eq('tenant_id', session.tenantId)
       .gte('logged_at', startDate)
       .lte('logged_at', end),
     supabaseAdmin
       .from('orders')
       .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', session.tenantId)
       .eq('status', 'Completed')
       .gte('date', startDate)
       .lte('date', endDate),
     supabaseAdmin
       .from('orders')
       .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', session.tenantId)
       .in('status', ['Booked', 'Assigned', 'Out for Delivery', 'On Site'])
       .gte('date', startDate)
       .lte('date', endDate),
+    // v_unpaid_invoices is a view — no tenant_id; update view before adding tenant #2
     supabaseAdmin.from('v_unpaid_invoices').select('id', { count: 'exact', head: true }),
   ])
 
@@ -425,11 +437,11 @@ export type SetupCheck = { id: string; label: string; ok: boolean; detail: strin
 
 /** Pre-handover system checklist for Settings tab */
 export async function getSetupStatusAction(): Promise<SetupCheck[]> {
-  await assertOffice()
+  const session = await assertOffice()
 
   const checks: SetupCheck[] = []
 
-  const { error: dbErr } = await supabaseAdmin.from('config').select('key').limit(1)
+  const { error: dbErr } = await supabaseAdmin.from('config').select('key').eq('tenant_id', session.tenantId).limit(1)
   checks.push({
     id: 'database',
     label: 'Database connected',
@@ -440,6 +452,7 @@ export async function getSetupStatusAction(): Promise<SetupCheck[]> {
   const { count: staffCount } = await supabaseAdmin
     .from('office_staff')
     .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', session.tenantId)
     .eq('active', true)
 
   const hasDomainAllowlist = Boolean(process.env.OFFICE_GOOGLE_ALLOWED_DOMAINS?.trim())
@@ -490,6 +503,7 @@ export async function getSetupStatusAction(): Promise<SetupCheck[]> {
   const { count: driverCount } = await supabaseAdmin
     .from('drivers')
     .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', session.tenantId)
 
   checks.push({
     id: 'drivers',
@@ -516,10 +530,8 @@ export async function generateWtnAction(weightLogId: string) {
   const { data: wl, error: wlErr } = await supabaseAdmin
     .from('weight_logs').select('*').eq('id', weightLogId).single()
   if (wlErr || !wl) throw new Error('Weight log not found')
-
   const net = Math.abs((wl.gross_weight || 0) - (wl.tare_weight || 0))
   const transferDate = (wl.logged_at || new Date().toISOString()).split('T')[0]
-
   const { data: wtn, error: wtnErr } = await supabaseAdmin
     .from('waste_transfer_notes')
     .insert({
@@ -533,7 +545,6 @@ export async function generateWtnAction(weightLogId: string) {
       vehicle_reg: wl.lorry_reg || null,
     })
     .select().single()
-
   if (wtnErr || !wtn) throw new Error(wtnErr?.message || 'Failed to create WTN')
   return wtn
 }

@@ -19,6 +19,7 @@ export interface AppConfig {
   bankName: string
   sortCode: string
   accountNumber: string
+  companyName: string
   pricesWaste: Record<string, number>
   pricesSkip: Record<string, number>
   disposalCosts: Record<string, number>
@@ -34,6 +35,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   demurrageNetFee: 30.00,
   permitAdminFee: 40,
   permitWeeklyFee: 45,
+  companyName: 'Enviroworx',
   officePhone: '01310000000',
   officeEmail: 'accounts@enviroworx.co.uk',
   officeAddress: 'Edinburgh, Scotland, EH1 1AA',

@@ -14,11 +14,11 @@ export function DashboardTab({ data, onRefresh }: { data: DashStats | null; onRe
   async function handleOverstaySms(skipId: string) {
     setSmsSending(skipId)
     try {
-      const res = await sendOverstaySmsAction(skipId)
-      if ('success' in res && res.success) {
+      const res = await sendOverstaySmsAction(skipId) as any
+      if (res?.success) {
         toast.success(`SMS sent`)
       } else {
-        toast.error('error' in res ? String(res.error) : 'SMS failed')
+        toast.error(res?.error ?? res?.message ?? 'SMS failed')
       }
     } catch (e: any) {
       toast.error(e.message)

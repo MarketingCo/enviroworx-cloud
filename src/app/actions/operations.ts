@@ -36,7 +36,7 @@ export async function autoAssignJobsAction(targetDate: string) {
 }
 
 export async function processBookingAction(
-  form: Parameters<typeof server.processBooking>[0]
+  form: Omit<Parameters<typeof server.processBooking>[0], 'tenantId'>
 ) {
   return withOfficeAction(
     {
@@ -45,21 +45,21 @@ export async function processBookingAction(
       entityType: 'customer',
       metadata: { jobType: form.jobType, address: form.address },
     },
-    () => server.processBooking(form)
+    (session) => server.processBooking({ ...form, tenantId: session.tenantId })
   )
 }
 
 export async function logActiveTipperAction(
-  form: Parameters<typeof server.logActiveTipper>[0]
+  form: Omit<Parameters<typeof server.logActiveTipper>[0], 'tenantId'>
 ) {
   return withOfficeAction(
     { type: 'weighbridge.tipper', message: `Tipper log: ${form.customerName}` },
-    () => server.logActiveTipper(form)
+    (session) => server.logActiveTipper({ ...form, tenantId: session.tenantId })
   )
 }
 
 export async function placeSkipOnMapAction(
-  form: Parameters<typeof server.placeSkipOnMap>[0]
+  form: Omit<Parameters<typeof server.placeSkipOnMap>[0], 'tenantId'>
 ) {
   return withOfficeAction(
     {
@@ -69,7 +69,7 @@ export async function placeSkipOnMapAction(
       entityId: form.skipId,
       metadata: { skipSize: form.skipSize, address: form.address },
     },
-    () => server.placeSkipOnMap(form)
+    (session) => server.placeSkipOnMap({ ...form, tenantId: session.tenantId })
   )
 }
 
@@ -88,7 +88,7 @@ export async function collectSkipFromMapAction(id: string) {
 }
 
 export async function processWeightLogAction(
-  form: Parameters<typeof server.processWeightLog>[0]
+  form: Omit<Parameters<typeof server.processWeightLog>[0], 'tenantId'>
 ) {
   return withOfficeAction(
     {
@@ -96,7 +96,7 @@ export async function processWeightLogAction(
       message: `Weighbridge: ${form.customerName}`,
       metadata: { grossWeight: form.grossWeight, customerName: form.customerName },
     },
-    () => server.processWeightLog(form)
+    (session) => server.processWeightLog({ ...form, tenantId: session.tenantId })
   )
 }
 
@@ -216,7 +216,7 @@ export async function clockInOutAction(
 ) {
   const session = await requireDriverSession()
   try {
-    const result = await server.clockInOut(driverName, pin, action, lorryReg)
+    const result = await server.clockInOut(driverName, pin, action, lorryReg, session.tenantId)
     await writeAudit(
       auditFromSession(session, {
         type: action === 'IN' ? 'driver.clock_in' : 'driver.clock_out',
@@ -326,6 +326,7 @@ export async function driverOnSiteAction(orderId: string, customerPhone?: string
     throw toActionError(error)
   }
 }
+
 
 export async function sendOverstaySmsAction(skipId: string) {
   return withOfficeAction(

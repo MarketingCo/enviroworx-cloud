@@ -14,6 +14,7 @@ export type AppSession = {
   role: SessionRole
   email?: string
   officeRole?: OfficeStaffRole
+  tenantId: string
 }
 
 const COOKIE_NAME = 'ew_session'
@@ -42,11 +43,14 @@ export async function createSessionToken(payload: AppSession): Promise<string> {
 export async function verifySessionToken(token: string): Promise<AppSession | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret())
-    if (!payload.sub || !payload.name || !payload.role) return null
+    if (!payload.sub || !payload.name || !payload.role || !payload.tenantId) return null
     return {
       sub: String(payload.sub),
       name: String(payload.name),
       role: payload.role as SessionRole,
+      email: payload.email ? String(payload.email) : undefined,
+      officeRole: payload.officeRole as OfficeStaffRole | undefined,
+      tenantId: String(payload.tenantId),
     }
   } catch {
     return null
@@ -110,6 +114,7 @@ export async function resolveOfficeSession(): Promise<AppSession | null> {
         role: 'office',
         email: staff.email,
         officeRole: staff.role,
+        tenantId: staff.tenantId,
       }
     }
   }
