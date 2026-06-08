@@ -154,7 +154,7 @@ async function generateDTN(params: URLSearchParams) {
 
   if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
 
-  const date = new Date(order.date).toLocaleDateString('en-GB')
+  const date = new Date(order.date ?? '').toLocaleDateString('en-GB')
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
@@ -266,7 +266,7 @@ async function generateInvoice(params: URLSearchParams) {
     orders = [data]
     // Get customer
     const { data: cust } = await supabaseAdmin.from('customers')
-      .select('*').ilike('name', data.customer_name).single()
+      .select('*').ilike('name', data.customer_name ?? '').single()
     customer = cust
   } else {
     const { data: cust } = await supabaseAdmin.from('customers').select('*').eq('id', customerId as string).single()

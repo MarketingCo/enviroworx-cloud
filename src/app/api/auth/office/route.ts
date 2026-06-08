@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     .from('drivers')
     .select('id, name')
     .ilike('name', name.trim())
-    .eq('pin', pin.trim())
+    .eq('pin_code', pin.trim())
     .maybeSingle()
 
   const { data: yardStaff } = !driver

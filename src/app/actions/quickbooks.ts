@@ -29,11 +29,11 @@ export async function syncOrderToQuickBooks(orderId: string) {
         .maybeSingle()
 
       const invoice = await createDraftInvoice({
-        customer_name: order.customer_name,
-        address: order.address,
-        skip_size: order.skip_size,
+        customer_name: order.customer_name ?? '',
+        address: order.address ?? '',
+        skip_size: order.skip_size ?? '',
         skip_id: order.skip_id_used || 'N/A',
-        date: order.date,
+        date: order.date ?? '',
         id: order.id,
         amount: cashLog?.cost_gross || 0,
       })

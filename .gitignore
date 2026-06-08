@@ -56,3 +56,4 @@ dev_output.txt
 package-lock 2.json
 /next
 /enviroworx-cloud@1.0.0
+.claude/

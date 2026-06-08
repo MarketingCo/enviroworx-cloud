@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import KmlSyncButton from '@/components/KmlSyncButton'
 import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, DollarSign, Settings, Trash2 } from 'lucide-react'
 import { getStoredTare } from '@/lib/api'
-import { searchCustomersAction } from '@/app/actions/office-data'
+import { searchCustomersAction, getEwcCodesAction, generateWtnAction } from '@/app/actions/office-data'
 import { logActiveTipperAction, processWeightLogAction } from '@/app/actions/operations'
 
 import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
@@ -18,6 +18,9 @@ export function WeighbridgeTab() {
   const [liveWeight, setLiveWeight] = useState<number | null>(null)
   const [tareMsg, setTareMsg] = useState('')
   const [manualOverride, setManualOverride] = useState('')
+  const [ewcCodes, setEwcCodes] = useState<{id:string;code:string;description:string}[]>([])
+  const [selectedEwcId, setSelectedEwcId] = useState('')
+  const [wtnGenerating, setWtnGenerating] = useState<string | null>(null)
   const [form, setForm] = useState({
     lorryReg: '', customerName: '', wasteType: 'Mix Con', grossWeight: '',
     tareWeight: '', skipSize: 'Tipper', skipId: '', address: 'Yard', direction: 'On-site',
@@ -28,6 +31,7 @@ export function WeighbridgeTab() {
 
   useEffect(() => {
     loadData()
+    getEwcCodesAction().then(setEwcCodes).catch(() => {})
     const ch = supabase.channel('wb').on('postgres_changes', { event: '*', schema: 'public', table: 'active_tippers' }, loadData).subscribe()
     const wbCh = supabase.channel('wb-readings').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'weighbridge_readings' }, (p) => {
       setLiveWeight((p.new as any).weight_kg)
@@ -153,6 +157,7 @@ export function WeighbridgeTab() {
       toast.error('Missing required weights or details')
       return
     }
+    const selectedEwc = ewcCodes.find(e => e.id === selectedEwcId)
     const result = await processWeightLogAction({
       lorryReg: form.lorryReg, customerName: form.customerName,
       wasteType: form.wasteType, grossWeight: Number(form.grossWeight),
@@ -162,27 +167,41 @@ export function WeighbridgeTab() {
       paymentMethod: form.paymentMethod,
       amountPaid: form.amountPaid ? Number(form.amountPaid) : 0,
       wbNotes: form.wbNotes, tipperRowIndex: form.tipperRowIndex,
+      ewcCodeId: selectedEwcId || undefined,
+      ewcCode: selectedEwc?.code || undefined,
     })
     
     if (result.success) {
+      const wlId = (result as any).weightLogId
       toast.success((t) => (
         <div className="flex flex-col gap-2">
           <span className="font-bold">✅ {result.message}</span>
-          <button 
-            onClick={() => {
-              window.open(`/api/documents?type=WTN&ticketNumber=${(result as any).ticketNumber}`, '_blank')
-              toast.dismiss(t.id)
-            }}
-            className="bg-emerald-500 text-white px-4 py-2 rounded text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all"
-          >
-            🖨️ Print Weight Ticket
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => { window.open(`/api/documents?type=WTN&ticketNumber=${(result as any).ticketNumber}`, '_blank'); toast.dismiss(t.id) }}
+              className="bg-emerald-500 text-white px-3 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all">
+              🖨️ Print Ticket
+            </button>
+            {wlId && (
+              <button
+                onClick={async () => {
+                  setWtnGenerating(wlId)
+                  try { const wtn = await generateWtnAction(wlId); window.open(`/api/documents/wtn?id=${wtn.id}`, '_blank') }
+                  catch { toast.error('WTN generation failed') }
+                  setWtnGenerating(null); toast.dismiss(t.id)
+                }}
+                disabled={wtnGenerating === wlId}
+                className="bg-blue-600 text-white px-3 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 disabled:opacity-50">
+                {wtnGenerating === wlId ? '...' : '📄 WTN'}
+              </button>
+            )}
+          </div>
         </div>
       ), { duration: 15000 })
 
       setForm({ lorryReg: '', customerName: '', grossWeight: '', tareWeight: '', skipId: '', amountPaid: '', wbNotes: '', tipperRowIndex: '', wasteType: 'Mix Con', skipSize: 'Tipper', address: 'Yard', direction: 'On-site', paymentMethod: 'Invoice' })
       setManualOverride('')
       setTareMsg('')
+      setSelectedEwcId('')
     } else {
       toast.error(result.message)
     }
@@ -316,6 +335,17 @@ export function WeighbridgeTab() {
             <select value={form.wasteType} onChange={e => set('wasteType', e.target.value)}
               className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm">
               {Object.entries(DEFAULT_CONFIG.pricesWaste).map(([w, p]) => <option key={w} value={w}>{w} — £{p}/t</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">
+              EWC Code <span className="text-slate-600 normal-case font-normal">(required for compliance)</span>
+            </label>
+            <select value={selectedEwcId} onChange={e => setSelectedEwcId(e.target.value)}
+              className={`w-full bg-slate-800 border ${selectedEwcId ? 'border-emerald-500/50' : 'border-amber-500/30'} text-white px-3 py-2 rounded text-sm`}>
+              <option value="">— Select EWC code —</option>
+              {ewcCodes.map(e => <option key={e.id} value={e.id}>{e.code} — {e.description}</option>)}
             </select>
           </div>
 

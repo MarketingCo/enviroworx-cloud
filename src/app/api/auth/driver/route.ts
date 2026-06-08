@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     .from('drivers')
     .select('id, name')
     .eq('name', name.trim())
-    .eq('pin', pin.trim())
+    .eq('pin_code', pin.trim())
     .maybeSingle()
 
   if (!driver) {

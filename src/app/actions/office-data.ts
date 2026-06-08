@@ -173,6 +173,14 @@ export async function generateReportAction(type: string, startDate: string, endD
       if (error) throw new Error(error.message)
       return data ?? []
     }
+    case 'UNPAID_INVOICES': {
+      const { data, error } = await supabaseAdmin
+        .from('v_unpaid_invoices')
+        .select('*')
+        .order('date')
+      if (error) throw new Error(error.message)
+      return data ?? []
+    }
     default:
       return []
   }
@@ -491,4 +499,41 @@ export async function getSetupStatusAction(): Promise<SetupCheck[]> {
   })
 
   return checks
+}
+
+export async function getEwcCodesAction() {
+  await assertOffice()
+  const { data, error } = await supabaseAdmin
+    .from('ewc_codes')
+    .select('id, code, description, hazardous')
+    .order('code')
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+export async function generateWtnAction(weightLogId: string) {
+  await assertOffice()
+  const { data: wl, error: wlErr } = await supabaseAdmin
+    .from('weight_logs').select('*').eq('id', weightLogId).single()
+  if (wlErr || !wl) throw new Error('Weight log not found')
+
+  const net = Math.abs((wl.gross_weight || 0) - (wl.tare_weight || 0))
+  const transferDate = (wl.logged_at || new Date().toISOString()).split('T')[0]
+
+  const { data: wtn, error: wtnErr } = await supabaseAdmin
+    .from('waste_transfer_notes')
+    .insert({
+      weight_log_id: weightLogId,
+      transfer_date: transferDate,
+      transferor_name: wl.customer_name,
+      transferor_address: wl.address || null,
+      waste_description: wl.waste_type || 'Mixed waste',
+      ewc_code: wl.ewc_code || null,
+      quantity_kg: net > 0 ? net : null,
+      vehicle_reg: wl.lorry_reg || null,
+    })
+    .select().single()
+
+  if (wtnErr || !wtn) throw new Error(wtnErr?.message || 'Failed to create WTN')
+  return wtn
 }

@@ -1,6 +1,7 @@
 'use server'
 
 import { requireDriverSession } from '@/lib/session'
+import { requireOfficeSession } from '@/lib/session'
 import { withOfficeAction } from '@/lib/office-action'
 import { writeAudit, auditFromSession } from '@/lib/audit'
 import { toActionError } from '@/lib/action-errors'
@@ -324,4 +325,11 @@ export async function driverOnSiteAction(orderId: string, customerPhone?: string
   } catch (error) {
     throw toActionError(error)
   }
+}
+
+export async function sendOverstaySmsAction(skipId: string) {
+  return withOfficeAction(
+    { type: 'skip.overstay_sms', message: `Overstay SMS sent for skip ${skipId}`, entityType: 'inventory', entityId: skipId },
+    () => server.sendOverstaySms(skipId)
+  )
 }

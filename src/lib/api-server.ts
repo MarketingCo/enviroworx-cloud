@@ -237,6 +237,17 @@ export async function processBooking(form: {
   })
 
   if (error) throw error
+
+  // Booking confirmation SMS — fire-and-forget, never block the booking
+  if (form.phone) {
+    const jobLabel = form.jobType === 'Collection' ? 'skip collection' : `${form.skipSize}yd skip delivery`
+    const dateFormatted = new Date(form.deliveryDate + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+    sendSms(
+      form.phone,
+      `Enviroworx: Your ${jobLabel} is booked for ${dateFormatted} at ${form.address}. Call ${DEFAULT_CONFIG.officePhone} to amend.`
+    ).catch(() => {/* SMS is best-effort */})
+  }
+
   return { success: true, message: '✅ Job Booked!' }
 }
 
@@ -362,6 +373,8 @@ export async function processWeightLog(form: {
   tylRef?: string
   wbNotes?: string
   tipperRowIndex?: string
+  ewcCodeId?: string
+  ewcCode?: string
 }) {
   if (form.wasteType === 'TBC') return { success: false, message: '❌ ERROR: Waste Type Required!' }
 
@@ -400,7 +413,9 @@ export async function processWeightLog(form: {
     tare_weight: tare,
     direction: form.direction as any,
     notes: form.wbNotes || null,
-  }).select('ticket_number').single()
+    ewc_code_id: form.ewcCodeId || null,
+    ewc_code: form.ewcCode || null,
+  }).select('ticket_number, id').single()
 
   if (wlError) throw wlError
 
@@ -471,6 +486,7 @@ export async function processWeightLog(form: {
     success: true,
     message: `📤 Ticket ${weightLog.ticket_number} Logged.${inventoryMessage}`,
     ticketNumber: weightLog.ticket_number,
+    weightLogId: weightLog.id,
   }
 }
 
@@ -498,7 +514,7 @@ export async function getDriverJobs(driverName: string) {
       const { data: skip } = await supabase
         .from('inventory')
         .select('skip_id')
-        .ilike('customer_name', job.customer_name)
+        .ilike('customer_name', job.customer_name ?? '')
         .in('status', ['Delivered', 'In Use'])
         .limit(1)
         .single()
@@ -581,14 +597,14 @@ export async function clockInOut(driverName: string, pin: string, action: 'IN' |
     .from('drivers')
     .select('*')
     .eq('name', driverName)
-    .eq('pin', pin)
+    .eq('pin_code', pin)
     .single()
 
   if (!driver) return { success: false, message: '❌ Invalid PIN for ' + driverName }
 
   if (action === 'IN') {
     const { data: shift } = await supabase.from('shifts').insert({
-      employee: driverName,
+      employee: driverName, shift_date: new Date().toISOString().split('T')[0],
       date: new Date().toISOString().split('T')[0],
       role_or_lorry: lorryReg || 'Driver',
       clock_in: new Date().toISOString(),
@@ -1037,7 +1053,7 @@ export async function getDriversList() {
 }
 
 export async function updateDriverPin(id: string, pin: string) {
-  const { error } = await supabase.from('drivers').update({ pin }).eq('id', id)
+  const { error } = await supabase.from('drivers').update({ pin_code: pin }).eq('id', id)
   if (error) throw error
   return { success: true }
 }
@@ -1064,4 +1080,32 @@ function getWeekStart() {
   const diff = d.getDate() - day + (day === 0 ? -6 : 1)
   const monday = new Date(d.setDate(diff))
   return monday.toISOString().split('T')[0]
+}
+
+// ============================================================
+// OVERSTAY SMS — send a collection reminder for a specific skip
+// ============================================================
+
+export async function sendOverstaySms(skipId: string) {
+  const { data: skip, error } = await supabase
+    .from('inventory')
+    .select('skip_id, skip_size, customer_name, customer_phone, delivery_address, delivery_date')
+    .eq('skip_id', skipId)
+    .single()
+
+  if (error || !skip) return { success: false, message: 'Skip not found' }
+  if (!skip.customer_phone) return { success: false, message: 'No phone number for this customer' }
+
+  const days = skip.delivery_date
+    ? Math.round((Date.now() - new Date(skip.delivery_date).getTime()) / 86400000)
+    : null
+
+  const daysText = days !== null ? ` for ${days} days` : ''
+  const message =
+    `Hi ${skip.customer_name ?? 'there'}, your ${skip.skip_size}yd skip at ${skip.delivery_address ?? 'your site'} has been in position${daysText}. ` +
+    `Please call ${DEFAULT_CONFIG.officePhone} to arrange collection or extend your hire. Enviroworx.`
+
+  const res = await sendSms(skip.customer_phone, message)
+  if (!res.success) return { success: false, message: 'SMS failed to send' }
+  return { success: true, message: `SMS sent to ${skip.customer_phone}` }
 }

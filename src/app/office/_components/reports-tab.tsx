@@ -77,6 +77,7 @@ export function ReportsTab() {
   const reports = [
     { type: 'SEPA', label: 'SEPA Report', desc: 'Waste transfer logs for Scottish Environment Protection Agency compliance' },
     { type: 'FINANCE', label: 'Finance Report', desc: 'Cash log with costs, payments, and outstanding balances' },
+    { type: 'UNPAID_INVOICES', label: 'Unpaid Invoices', desc: 'All outstanding invoices from orders and tipping — export for credit control or QuickBooks import' },
     { type: 'DRIVER_MANIFEST', label: 'Driver Manifest', desc: 'Completed jobs grouped by driver for payroll and operations review' },
     { type: 'ASSETS', label: 'Asset Report', desc: 'Current skip inventory — skips deployed to customers right now' },
   ]

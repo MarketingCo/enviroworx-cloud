@@ -427,7 +427,7 @@ export async function getDriverJobs(driverName: string) {
       const { data: skip } = await supabase
         .from('inventory')
         .select('skip_id')
-        .ilike('customer_name', job.customer_name)
+        .ilike('customer_name', job.customer_name ?? '')
         .in('status', ['Delivered', 'In Use'])
         .limit(1)
         .single()
@@ -510,14 +510,14 @@ export async function clockInOut(driverName: string, pin: string, action: 'IN' |
     .from('drivers')
     .select('*')
     .eq('name', driverName)
-    .eq('pin', pin)
+    .eq('pin_code', pin)
     .single()
 
   if (!driver) return { success: false, message: '❌ Invalid PIN for ' + driverName }
 
   if (action === 'IN') {
     const { data: shift } = await supabase.from('shifts').insert({
-      employee: driverName,
+      employee: driverName, shift_date: new Date().toISOString().split('T')[0],
       date: new Date().toISOString().split('T')[0],
       role_or_lorry: lorryReg || 'Driver',
       clock_in: new Date().toISOString(),
@@ -964,7 +964,7 @@ export async function getDriversList() {
 }
 
 export async function updateDriverPin(id: string, pin: string) {
-  const { error } = await supabase.from('drivers').update({ pin }).eq('id', id)
+  const { error } = await supabase.from('drivers').update({ pin_code: pin }).eq('id', id)
   if (error) throw error
   return { success: true }
 }
