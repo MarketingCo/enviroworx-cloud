@@ -1,184 +1,188 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
+import { DEFAULT_CONFIG, WB_SIZES } from '@/lib/config'
 import toast from 'react-hot-toast'
-import KmlSyncButton from '@/components/KmlSyncButton'
-import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, DollarSign, Settings, Trash2 } from 'lucide-react'
+import { Weight, X } from 'lucide-react'
 import { getStoredTare } from '@/lib/api'
 import { searchCustomersAction, getEwcCodesAction, generateWtnAction } from '@/app/actions/office-data'
 import { logActiveTipperAction, processWeightLogAction } from '@/app/actions/operations'
+import { SectionHeader } from './shared'
 
-import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
+const BLANK = {
+  lorryReg: '', customerName: '', wasteType: 'Mix Con', grossWeight: '',
+  tareWeight: '', skipSize: 'Tipper', skipId: '', address: 'Yard',
+  direction: 'On-site', paymentMethod: 'Invoice', amountPaid: '', wbNotes: '', tipperRowIndex: '',
+}
 
 export function WeighbridgeTab() {
-  const [tippers, setTippers] = useState<any[]>([])
+  const [queued, setQueued] = useState<any[]>([])
   const [lorries, setLorries] = useState<any[]>([])
   const [liveWeight, setLiveWeight] = useState<number | null>(null)
   const [tareMsg, setTareMsg] = useState('')
-  const [manualOverride, setManualOverride] = useState('')
-  const [ewcCodes, setEwcCodes] = useState<{id:string;code:string;description:string}[]>([])
+  const [hasSotredTare, setHasStoredTare] = useState(false)
+  const [manualPrice, setManualPrice] = useState('')
+  const [ewcCodes, setEwcCodes] = useState<{ id: string; code: string; description: string }[]>([])
   const [selectedEwcId, setSelectedEwcId] = useState('')
   const [wtnGenerating, setWtnGenerating] = useState<string | null>(null)
-  const [form, setForm] = useState({
-    lorryReg: '', customerName: '', wasteType: 'Mix Con', grossWeight: '',
-    tareWeight: '', skipSize: 'Tipper', skipId: '', address: 'Yard', direction: 'On-site',
-    paymentMethod: 'Invoice', amountPaid: '', wbNotes: '', tipperRowIndex: ''
-  })
+  const [processing, setProcessing] = useState(false)
+  const [form, setForm] = useState({ ...BLANK })
   const [suggestions, setSuggestions] = useState<any[]>([])
-  const searchTimerRef = useRef<any>(null)
+  const searchTimer = useRef<any>(null)
 
   useEffect(() => {
-    loadData()
+    load()
     getEwcCodesAction().then(setEwcCodes).catch(() => {})
-    const ch = supabase.channel('wb').on('postgres_changes', { event: '*', schema: 'public', table: 'active_tippers' }, loadData).subscribe()
-    const wbCh = supabase.channel('wb-readings').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'weighbridge_readings' }, (p) => {
-      setLiveWeight((p.new as any).weight_kg)
-    }).subscribe()
-    return () => { supabase.removeChannel(ch); supabase.removeChannel(wbCh) }
+    const queueCh = supabase.channel('wb-queue')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'active_tippers' }, load)
+      .subscribe()
+    const scaleCh = supabase.channel('wb-scale')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'weighbridge_readings' }, (p) => {
+        setLiveWeight((p.new as any).weight_kg)
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(queueCh); supabase.removeChannel(scaleCh) }
   }, [])
 
-  async function loadData() {
-    const [{ data: t }, { data: l }] = await Promise.all([
+  async function load() {
+    const [{ data: q }, { data: l }] = await Promise.all([
       supabase.from('active_tippers').select('*').order('timestamp', { ascending: false }),
       supabase.from('lorries').select('*').order('registration'),
     ])
-    setTippers(t ?? [])
+    setQueued(q ?? [])
     setLorries(l ?? [])
   }
 
   function set(k: string, v: string) { setForm(f => ({ ...f, [k]: v })) }
 
+  function reset() {
+    setForm({ ...BLANK })
+    setManualPrice('')
+    setTareMsg('')
+    setHasStoredTare(false)
+    setSelectedEwcId('')
+    setSuggestions([])
+  }
+
   function handleNameChange(v: string) {
     set('customerName', v)
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    clearTimeout(searchTimer.current)
     if (v.length > 2) {
-      searchTimerRef.current = setTimeout(async () => {
-        try {
-          const results = await searchCustomersAction(v)
-          setSuggestions(results)
-        } catch {
-          setSuggestions([])
-        }
+      searchTimer.current = setTimeout(async () => {
+        const r = await searchCustomersAction(v).catch(() => [])
+        setSuggestions(r)
       }, 300)
     } else {
       setSuggestions([])
     }
   }
 
-  function selectSuggestion(c: any) {
+  function selectCustomer(c: any) {
     setForm(f => ({ ...f, customerName: c.name, address: c.billing_address || 'Yard' }))
     setSuggestions([])
   }
 
-  async function fetchTare(reg: string, size: string) {
-    if (!reg) { setTareMsg(''); return }
-    setTareMsg('Checking...')
-    const tare = await getStoredTare(reg, size)
-    if (tare !== null) {
-      setForm(f => ({ ...f, tareWeight: String(tare) }))
-      setTareMsg('Auto-filled')
+  async function handleRegChange(v: string) {
+    set('lorryReg', v)
+    if (!v) { setTareMsg(''); setHasStoredTare(false); return }
+    setTareMsg('Checking tare…')
+    const t = await getStoredTare(v, form.skipSize)
+    if (t !== null) {
+      setForm(f => ({ ...f, lorryReg: v, tareWeight: String(t) }))
+      setHasStoredTare(true)
+      setTareMsg(`Tare auto-filled (${t.toLocaleString()} kg)`)
     } else {
-      setTareMsg('No stored tare')
+      setHasStoredTare(false)
+      setTareMsg('')
     }
   }
 
-  function handleLorryChange(val: string) {
-    set('lorryReg', val)
-    fetchTare(val, form.skipSize)
+  async function handleSizeChange(v: string) {
+    set('skipSize', v)
+    if (!form.lorryReg) return
+    const t = await getStoredTare(form.lorryReg, v)
+    if (t !== null) {
+      setForm(f => ({ ...f, skipSize: v, tareWeight: String(t) }))
+      setHasStoredTare(true)
+      setTareMsg(`Tare auto-filled (${t.toLocaleString()} kg)`)
+    } else {
+      setHasStoredTare(false)
+      setTareMsg('')
+    }
   }
 
-  function handleSizeChange(val: string) {
-    set('skipSize', val)
-    fetchTare(form.lorryReg, val)
-  }
-
-  function captureWeight(field: 'grossWeight' | 'tareWeight') {
+  function captureScale(field: 'grossWeight' | 'tareWeight') {
     if (liveWeight !== null) {
       set(field, String(liveWeight))
-      toast.success(`Captured ${liveWeight}kg`)
+      toast.success(`Captured ${liveWeight.toLocaleString()} kg`)
+    } else {
+      toast.error('No live weight on scale')
     }
   }
 
-  function getWaitTime(timestamp: string) {
-    const minutes = Math.floor((Date.now() - new Date(timestamp).getTime()) / 60000)
-    if (minutes < 10) return { text: `${minutes}m wait`, color: 'text-emerald-400' }
-    if (minutes < 20) return { text: `${minutes}m wait`, color: 'text-yellow-400' }
-    return { text: `${minutes}m wait!`, color: 'text-red-400' }
-  }
-
-  function loadFromTipper(t: any) {
+  // Load a queued truck (pre-fills gross, they've come back from tipping → need tare)
+  function loadQueued(t: any) {
     setForm(f => ({
       ...f,
-      lorryReg: t.reg,
-      customerName: t.customer_name,
-      wasteType: t.waste_type,
-      grossWeight: String(t.gross_weight || ''),
-      tareWeight: String(liveWeight || ''),
-      skipSize: t.skip_size,
-      skipId: t.skip_id || '',
-      address: t.address || 'Yard',
-      tipperRowIndex: t.id,
-      direction: 'On-site',
+      lorryReg: t.reg, customerName: t.customer_name, wasteType: t.waste_type,
+      grossWeight: String(t.gross_weight || ''), skipSize: t.skip_size,
+      skipId: t.skip_id || '', address: t.address || 'Yard', tipperRowIndex: t.id,
     }))
-    setManualOverride('')
-    toast.success(`Loaded ${t.reg || 'Truck'} from yard. Ready to process.`)
+    setManualPrice('')
+    setHasStoredTare(false)
+    setTareMsg('Vehicle back from tipping — capture outgoing weight as tare')
+    toast.success(`${t.reg || t.customer_name} loaded — capture tare weight`)
   }
-  async function handleLogTipper() {
-    if (!form.lorryReg || !form.customerName) {
-      toast.error('Registration and Customer Name are required', { icon: '⚠️' })
-      return
-    }
-    const weightToUse = form.grossWeight || String(liveWeight || 0)
-    const result = await logActiveTipperAction({
-      lorryReg: form.lorryReg, customerName: form.customerName,
-      wasteType: form.wasteType, grossWeight: Number(weightToUse),
-      address: form.address || 'Yard', skipSize: form.skipSize, skipId: form.skipId,
-    })
-    
-    if (result.success) {
-      toast.success(result.message, { icon: '📥', duration: 4000 })
-      // CRITICAL FIX: Reset the ENTIRE form so the next truck is a clean slate
-      setForm({
-        lorryReg: '', customerName: '', wasteType: 'Mix Con', grossWeight: '',
-        tareWeight: '', skipSize: 'Tipper', skipId: '', address: 'Yard', direction: 'On-site',
-        paymentMethod: 'Invoice', amountPaid: '', wbNotes: '', tipperRowIndex: ''
-      })
-      setManualOverride('')
-      setSuggestions([])
+
+  // Stage 1 for two-weighing flow: park the truck while it tips
+  async function parkWhileTipping() {
+    if (!form.lorryReg) { toast.error('Enter vehicle reg'); return }
+    if (!form.customerName) { toast.error('Enter customer name'); return }
+    if (!form.grossWeight && liveWeight === null) { toast.error('Capture incoming weight first'); return }
+    const gross = form.grossWeight || String(liveWeight || 0)
+    const r = await logActiveTipperAction({
+      lorryReg: form.lorryReg, customerName: form.customerName, wasteType: form.wasteType,
+      grossWeight: Number(gross), address: form.address || 'Yard',
+      skipSize: form.skipSize, skipId: form.skipId,
+    }) as any
+    if (r?.success) {
+      toast.success(`${form.lorryReg} parked — gross ${Number(gross).toLocaleString()} kg saved. Weigh again when empty.`)
+      reset()
     } else {
-      toast.error(result.message)
+      toast.error(r?.message || 'Failed to park')
     }
   }
 
-  async function handleProcessWeight() {
-    if (!form.lorryReg || !form.customerName || !form.grossWeight || !form.tareWeight) {
-      toast.error('Missing required weights or details')
-      return
-    }
+  async function handleWeighAndTicket() {
+    if (!form.lorryReg) { toast.error('Enter vehicle reg'); return }
+    if (!form.customerName) { toast.error('Enter customer name'); return }
+    if (!form.grossWeight) { toast.error('Capture or enter gross weight'); return }
+    if (!form.tareWeight) { toast.error('Capture or enter tare weight'); return }
+
+    setProcessing(true)
     const selectedEwc = ewcCodes.find(e => e.id === selectedEwcId)
     const result = await processWeightLogAction({
-      lorryReg: form.lorryReg, customerName: form.customerName,
-      wasteType: form.wasteType, grossWeight: Number(form.grossWeight),
-      tareWeight: Number(form.tareWeight), skipSize: form.skipSize,
-      skipId: form.skipId, address: form.address || 'Yard', direction: form.direction,
-      costNet: manualOverride !== '' ? Number(manualOverride) : undefined,
+      lorryReg: form.lorryReg, customerName: form.customerName, wasteType: form.wasteType,
+      grossWeight: Number(form.grossWeight), tareWeight: Number(form.tareWeight),
+      skipSize: form.skipSize, skipId: form.skipId || undefined,
+      address: form.address || 'Yard', direction: form.direction,
+      costNet: manualPrice !== '' ? Number(manualPrice) : undefined,
       paymentMethod: form.paymentMethod,
       amountPaid: form.amountPaid ? Number(form.amountPaid) : 0,
       wbNotes: form.wbNotes, tipperRowIndex: form.tipperRowIndex,
-      ewcCodeId: selectedEwcId || undefined,
-      ewcCode: selectedEwc?.code || undefined,
-    })
-    
-    if (result.success) {
-      const wlId = (result as any).weightLogId
+      ewcCodeId: selectedEwcId || undefined, ewcCode: selectedEwc?.code || undefined,
+    }) as any
+    setProcessing(false)
+
+    if (result?.success) {
+      const wlId = result.weightLogId
       toast.success((t) => (
         <div className="flex flex-col gap-2">
-          <span className="font-bold">✅ {result.message}</span>
+          <span className="font-bold">✅ Ticket {result.ticketNumber} — {net.toLocaleString()} kg net</span>
           <div className="flex gap-2">
-            <button onClick={() => { window.open(`/api/documents?type=WTN&ticketNumber=${(result as any).ticketNumber}`, '_blank'); toast.dismiss(t.id) }}
-              className="bg-emerald-500 text-white px-3 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all">
+            <button onClick={() => { window.open(`/api/documents?type=WTN&ticketNumber=${result.ticketNumber}`, '_blank'); toast.dismiss(t.id) }}
+              className="bg-emerald-500 text-white px-3 py-1.5 rounded text-[10px] font-black uppercase hover:bg-emerald-600">
               🖨️ Print Ticket
             </button>
             {wlId && (
@@ -186,277 +190,302 @@ export function WeighbridgeTab() {
                 onClick={async () => {
                   setWtnGenerating(wlId)
                   try { const wtn = await generateWtnAction(wlId); window.open(`/api/documents/wtn?id=${wtn.id}`, '_blank') }
-                  catch { toast.error('WTN generation failed') }
+                  catch { toast.error('WTN failed') }
                   setWtnGenerating(null); toast.dismiss(t.id)
                 }}
                 disabled={wtnGenerating === wlId}
-                className="bg-blue-600 text-white px-3 py-2 rounded text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 disabled:opacity-50">
-                {wtnGenerating === wlId ? '...' : '📄 WTN'}
+                className="bg-blue-600 text-white px-3 py-1.5 rounded text-[10px] font-black uppercase hover:bg-blue-500 disabled:opacity-50">
+                {wtnGenerating === wlId ? '…' : '📄 WTN'}
               </button>
             )}
           </div>
         </div>
       ), { duration: 15000 })
-
-      setForm({ lorryReg: '', customerName: '', grossWeight: '', tareWeight: '', skipId: '', amountPaid: '', wbNotes: '', tipperRowIndex: '', wasteType: 'Mix Con', skipSize: 'Tipper', address: 'Yard', direction: 'On-site', paymentMethod: 'Invoice' })
-      setManualOverride('')
-      setTareMsg('')
-      setSelectedEwcId('')
+      reset()
     } else {
-      toast.error(result.message)
+      toast.error(result?.message || 'Failed to process')
     }
   }
 
-  // Pricing calculation (matches legacy logic exactly)
   const gross = Number(form.grossWeight) || 0
   const tare = Number(form.tareWeight) || 0
   const net = Math.max(0, gross - tare)
   const isCage = form.skipSize?.toUpperCase() === 'CAGE'
-  const isOwnFleet = !!form.lorryReg
-  const wasteRate = DEFAULT_CONFIG.pricesWaste[form.wasteType] || 0
-  let autoPrice = 0
-  if (isCage) {
-    autoPrice = 180 + (net / 1000) * wasteRate
-  } else if (!isOwnFleet) {
-    autoPrice = (net / 1000) * wasteRate
-  }
-  const displayPrice = manualOverride !== '' ? Number(manualOverride) : autoPrice
-  const displayLabel = isOwnFleet && manualOverride === '' ? 'Pre-paid skip — £0.00' : fmt(displayPrice)
+  const isSkipSize = /^\d/.test(form.skipSize)
+  const autoPrice = isCage
+    ? 180 + (net / 1000) * (DEFAULT_CONFIG.pricesWaste[form.wasteType] || 0)
+    : (net / 1000) * (DEFAULT_CONFIG.pricesWaste[form.wasteType] || 0)
+  const effectivePrice = manualPrice !== '' ? Number(manualPrice) : autoPrice
+  const cashPayment = ['Cash', 'Card'].includes(form.paymentMethod)
+
+  // Determine which flow mode we're in
+  const hasGross = gross > 0
+  const hasTare = tare > 0
+  const readyToProcess = hasGross && hasTare
 
   return (
-    <div className="grid lg:grid-cols-5 gap-6">
-      {/* Holding Pen */}
-      <div className="lg:col-span-2 space-y-4">
-        <div className="bg-slate-900 border border-white/5 rounded-xl p-5">
-          <SectionHeader title={`Holding Pen (${tippers.length})`} />
-          {tippers.length === 0 && <p className="text-slate-500 text-sm">No trucks in yard</p>}
-          <div className="space-y-2 mt-3">
-            {tippers.map((t: any) => {
-              const wait = getWaitTime(t.timestamp)
+    <div className="max-w-xl mx-auto space-y-4">
+
+      {/* Live scale — always at top when active */}
+      {liveWeight !== null && (
+        <div className="bg-slate-900 border border-primary/40 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Weight size={18} className="text-primary" />
+            <span className="text-xs font-black uppercase tracking-widest text-slate-500">Scale Reading</span>
+          </div>
+          <span className="text-3xl font-black text-primary">{liveWeight.toLocaleString()} <span className="text-base">kg</span></span>
+        </div>
+      )}
+
+      {/* Queue strip — trucks parked mid-tip */}
+      {queued.length > 0 && (
+        <div className="bg-slate-900 border border-white/5 rounded-xl p-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Trucks tipping on site ({queued.length}) — click to load when back on scale</p>
+          <div className="flex flex-wrap gap-2">
+            {queued.map(t => {
+              const mins = Math.floor((Date.now() - new Date(t.timestamp).getTime()) / 60000)
               return (
-                <button key={t.id} onClick={() => loadFromTipper(t)}
-                  className="w-full text-left bg-slate-800 hover:bg-slate-700 border border-white/5 hover:border-primary/50 rounded-lg p-3 transition-all group">
-                  <div className="flex justify-between items-center">
-                    <span className="font-black text-white">{t.reg || 'Manual'}</span>
-                    <span className={`text-[10px] font-black uppercase tracking-tighter ${wait.color}`}>{wait.text}</span>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5">{t.customer_name} · {t.waste_type}</p>
-                  <div className="flex justify-between items-center mt-2 border-t border-white/5 pt-2">
-                    <p className="text-[9px] text-slate-600 font-bold uppercase tracking-tighter">Entered {new Date(t.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>
-                    <ChevronRight size={12} className="text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
+                <button key={t.id} onClick={() => loadQueued(t)}
+                  className="flex items-center gap-2 bg-slate-800 hover:bg-primary hover:text-slate-900 border border-white/5 hover:border-primary rounded-lg px-3 py-2 transition-all group">
+                  <span className="font-black text-sm text-white group-hover:text-slate-900">{t.reg || t.customer_name}</span>
+                  <span className={`text-[9px] font-black uppercase ${mins >= 20 ? 'text-red-400' : 'text-yellow-400'} group-hover:text-slate-700`}>{mins}m</span>
                 </button>
               )
             })}
           </div>
         </div>
+      )}
 
-        {liveWeight !== null && (
-          <div className="bg-slate-900 border border-primary/20 rounded-xl p-5 text-center group relative overflow-hidden">
-            <div className="absolute inset-0 bg-primary/5 animate-pulse" />
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-1 relative z-10">Live Scale</p>
-            <p className="text-5xl font-black text-primary relative z-10">{liveWeight.toLocaleString()} <span className="text-xl">kg</span></p>
-          </div>
-        )}
-      </div>
-
-      {/* Log Form */}
-      <div className="lg:col-span-3 bg-slate-900 border border-white/5 rounded-xl p-5 shadow-2xl">
-        <div className="flex justify-between items-center mb-6">
+      {/* Main form */}
+      <div className="bg-slate-900 border border-white/5 rounded-xl p-6 space-y-4">
+        <div className="flex justify-between items-center">
           <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500">Weighbridge</h3>
-          <button 
-            onClick={() => {
-              setForm({ lorryReg: '', customerName: '', wasteType: 'Mix Con', grossWeight: '', tareWeight: '', skipSize: 'Tipper', skipId: '', address: 'Yard', direction: 'On-site', paymentMethod: 'Invoice', amountPaid: '', wbNotes: '', tipperRowIndex: '' })
-              setManualOverride('')
-              setSuggestions([])
-            }}
-            className="text-[10px] font-black text-slate-500 hover:text-red-400 uppercase tracking-widest transition-colors"
-          >
-            Reset Form
+          <button onClick={reset} className="text-[10px] font-black text-slate-600 hover:text-red-400 uppercase tracking-widest transition-colors flex items-center gap-1">
+            <X size={10} /> Clear
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={`text-xs font-bold uppercase tracking-widest block mb-1 transition-colors ${!form.lorryReg ? 'text-amber-500' : 'text-slate-500'}`}>
-              Registration {!form.lorryReg && ' *'}
-            </label>
-            <div className="flex gap-2">
-              <input 
-                type="text" 
-                value={form.lorryReg} 
-                onChange={e => set('lorryReg', e.target.value.toUpperCase())}
-                placeholder="Type Reg..."
-                className={`flex-1 bg-slate-800 border ${!form.lorryReg ? 'border-amber-500/50' : 'border-white/10'} text-white px-3 py-2 rounded text-sm focus:border-primary outline-none uppercase font-mono transition-all`} 
-              />
-              <select 
-                value={lorries.some(l => l.registration === form.lorryReg) ? form.lorryReg : ''} 
-                onChange={e => handleLorryChange(e.target.value)}
-                className="w-24 bg-slate-800 border border-white/10 text-white px-2 py-2 rounded text-[10px] font-bold uppercase"
-              >
-                <option value="">FLEET</option>
-                {lorries.map((l: any) => <option key={l.registration} value={l.registration}>{l.registration}</option>)}
-              </select>
+        {/* Vehicle reg */}
+        <div>
+          <label className={`text-xs font-bold uppercase tracking-widest block mb-1 ${!form.lorryReg ? 'text-amber-400' : 'text-slate-500'}`}>
+            Vehicle Reg
+          </label>
+          <div className="flex gap-2">
+            <input type="text" value={form.lorryReg}
+              onChange={e => handleRegChange(e.target.value.toUpperCase())}
+              placeholder="SN68 VYL, van reg, trailer…"
+              className={`flex-1 bg-slate-800 border ${!form.lorryReg ? 'border-amber-500/40' : 'border-white/10'} text-white px-3 py-2.5 rounded text-sm font-mono focus:border-primary outline-none uppercase`} />
+            <select onChange={e => { if (e.target.value) handleRegChange(e.target.value) }}
+              className="w-24 bg-slate-800 border border-white/10 text-white px-2 py-2 rounded text-[10px] font-bold uppercase">
+              <option value="">Fleet</option>
+              {lorries.map((l: any) => <option key={l.registration} value={l.registration}>{l.registration}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Customer */}
+        <div className="relative">
+          <label className={`text-xs font-bold uppercase tracking-widest block mb-1 ${!form.customerName ? 'text-amber-400' : 'text-slate-500'}`}>
+            Customer / Site
+          </label>
+          <input type="text" value={form.customerName}
+            onChange={e => handleNameChange(e.target.value)}
+            placeholder="Search customers…"
+            className={`w-full bg-slate-800 border ${!form.customerName ? 'border-amber-500/40' : 'border-white/10'} text-white px-3 py-2.5 rounded text-sm focus:border-primary outline-none`} />
+          {suggestions.length > 0 && (
+            <div className="absolute z-50 w-full bg-slate-800 border border-white/20 rounded-lg mt-1 shadow-[0_20px_50px_rgba(0,0,0,0.6)] max-h-52 overflow-y-auto">
+              {suggestions.map((c: any) => (
+                <button key={c.id} onClick={() => selectCustomer(c)}
+                  className="w-full text-left px-4 py-2.5 hover:bg-primary hover:text-slate-900 text-sm text-white flex justify-between border-b border-white/5 transition-all">
+                  <span className="font-black">{c.name}</span>
+                  <span className="text-[10px] opacity-50">{c.phone}</span>
+                </button>
+              ))}
             </div>
-          </div>
+          )}
+        </div>
 
-          <div className="relative">
-            <label className={`text-xs font-bold uppercase tracking-widest block mb-1 transition-colors ${!form.customerName ? 'text-amber-500' : 'text-slate-500'}`}>
-              Customer / Site {!form.customerName && ' *'}
-            </label>
-            <input type="text" value={form.customerName} onChange={e => handleNameChange(e.target.value)}
-              placeholder="Search customers..."
-              className={`w-full bg-slate-800 border ${!form.customerName ? 'border-amber-500/50' : 'border-white/10'} text-white px-3 py-2 rounded text-sm focus:border-primary outline-none transition-all`} />
-            {suggestions.length > 0 && (
-              <div className="absolute z-50 w-full bg-slate-800 border border-white/20 rounded-lg mt-1 shadow-[0_20px_50px_rgba(0,0,0,0.5)] max-h-64 overflow-y-auto">
-                {suggestions.map((c: any) => (
-                  <button key={c.id} onClick={() => selectSuggestion(c)}
-                    className="w-full text-left px-4 py-3 hover:bg-primary hover:text-slate-900 text-sm text-white flex justify-between border-b border-white/5 group transition-all">
-                    <div className="flex-1 min-w-0 pr-4">
-                      <div className="flex items-center gap-2">
-                        <span className="font-black truncate">{c.name}</span>
-                        {c.updated_at && (
-                          <span className="text-[8px] font-black uppercase tracking-tighter px-1 rounded bg-slate-950 text-slate-500 group-hover:bg-white/20 group-hover:text-slate-900">
-                            Active
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[10px] opacity-60 truncate">{c.billing_address || 'No address'}</p>
-                    </div>
-                    <span className="text-[10px] font-bold shrink-0 self-center opacity-40 group-hover:opacity-100">{c.phone}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
+        {/* Waste type + EWC */}
+        <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Waste Type</label>
             <select value={form.wasteType} onChange={e => set('wasteType', e.target.value)}
-              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm">
-              {Object.entries(DEFAULT_CONFIG.pricesWaste).map(([w, p]) => <option key={w} value={w}>{w} — £{p}/t</option>)}
+              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2.5 rounded text-sm">
+              {Object.entries(DEFAULT_CONFIG.pricesWaste).map(([w, p]) => (
+                <option key={w} value={w}>{w} — £{p}/t</option>
+              ))}
             </select>
           </div>
-
           <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">
-              EWC Code <span className="text-slate-600 normal-case font-normal">(required for compliance)</span>
-            </label>
+            <label className={`text-xs font-bold uppercase tracking-widest block mb-1 ${!selectedEwcId ? 'text-amber-400' : 'text-slate-500'}`}>EWC Code</label>
             <select value={selectedEwcId} onChange={e => setSelectedEwcId(e.target.value)}
-              className={`w-full bg-slate-800 border ${selectedEwcId ? 'border-emerald-500/50' : 'border-amber-500/30'} text-white px-3 py-2 rounded text-sm`}>
-              <option value="">— Select EWC code —</option>
-              {ewcCodes.map(e => <option key={e.id} value={e.id}>{e.code} — {e.description}</option>)}
+              className={`w-full bg-slate-800 border ${selectedEwcId ? 'border-white/10' : 'border-amber-500/40'} text-white px-3 py-2.5 rounded text-sm`}>
+              <option value="">Select…</option>
+              {ewcCodes.map(e => <option key={e.id} value={e.id}>{e.code}</option>)}
             </select>
           </div>
+        </div>
 
+        {/* Vehicle type + direction */}
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Vehicle Size</label>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Vehicle Type</label>
             <select value={form.skipSize} onChange={e => handleSizeChange(e.target.value)}
-              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm">
+              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2.5 rounded text-sm">
               {WB_SIZES.map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
-
-          <div>
-            <div className="flex justify-between items-end mb-1">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Gross (kg)</label>
-              <button onClick={() => captureWeight('grossWeight')} className="text-[9px] font-black text-primary uppercase hover:underline">Capture Scale</button>
-            </div>
-            <input type="number" value={form.grossWeight} onChange={e => set('grossWeight', e.target.value)}
-              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
-          </div>
-
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Skip ID</label>
-            <input type="text" value={form.skipId} onChange={e => set('skipId', e.target.value)}
-              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
-          </div>
-
-          <div>
-            <div className="flex justify-between items-end mb-1">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tare (kg)</label>
-              <button onClick={() => captureWeight('tareWeight')} className="text-[9px] font-black text-primary uppercase hover:underline">Capture Scale</button>
-            </div>
-            <input type="number" value={form.tareWeight} onChange={e => { set('tareWeight', e.target.value); setTareMsg('') }}
-              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
-            {tareMsg && <p className={`text-[10px] mt-1 ${tareMsg === 'Auto-filled' ? 'text-primary' : 'text-amber-400'}`}>{tareMsg}</p>}
-          </div>
-
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Direction</label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-1.5">
               {[{ val: 'On-site', label: '↓ IN' }, { val: 'Off-site', label: '↑ OUT' }].map(d => (
                 <button key={d.val} type="button" onClick={() => set('direction', d.val)}
-                  className={`py-2 rounded text-[10px] font-black transition-all ${form.direction === d.val ? (d.val === 'On-site' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white') : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+                  className={`py-2.5 rounded text-[10px] font-black transition-all ${form.direction === d.val
+                    ? d.val === 'On-site' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
                   {d.label}
                 </button>
               ))}
             </div>
           </div>
+        </div>
 
+        {/* ── WEIGHING SECTION ── */}
+        {/* Context-aware: if tare is stored, just show gross. If not, show both with clear labels. */}
+        <div className={`grid gap-3 ${hasSotredTare ? 'grid-cols-1' : 'grid-cols-2'}`}>
+
+          {/* GROSS — always shown */}
+          <div className={`${hasGross ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-slate-800/40 border-white/10'} border rounded-lg p-3 transition-all`}>
+            <div className="flex justify-between items-center mb-2">
+              <div>
+                <p className={`text-[10px] font-black uppercase tracking-widest ${hasGross ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  {hasSotredTare ? 'Gross Weight (kg)' : '① Incoming — vehicle LOADED'}
+                </p>
+                {!hasSotredTare && !hasGross && (
+                  <p className="text-[9px] text-slate-600 mt-0.5">Capture when vehicle arrives on scale</p>
+                )}
+              </div>
+              <button onClick={() => captureScale('grossWeight')}
+                className="text-[9px] font-black text-primary uppercase hover:underline whitespace-nowrap">
+                ⚡ Capture
+              </button>
+            </div>
+            <input type="number" value={form.grossWeight} onChange={e => set('grossWeight', e.target.value)}
+              placeholder="0"
+              className={`w-full bg-transparent border-0 text-2xl font-black text-white outline-none placeholder:text-slate-700`} />
+          </div>
+
+          {/* TARE — hidden if auto-filled from stored values */}
+          {!hasSotredTare && (
+            <div className={`${hasTare ? 'bg-blue-900/20 border-blue-500/30' : 'bg-slate-800/40 border-white/10'} border rounded-lg p-3 transition-all`}>
+              <div className="flex justify-between items-center mb-2">
+                <div>
+                  <p className={`text-[10px] font-black uppercase tracking-widest ${hasTare ? 'text-blue-400' : 'text-slate-500'}`}>
+                    ② Outgoing — vehicle EMPTY
+                  </p>
+                  {!hasTare && (
+                    <p className="text-[9px] text-slate-600 mt-0.5">Capture when vehicle returns from tipping</p>
+                  )}
+                </div>
+                <button onClick={() => captureScale('tareWeight')}
+                  className="text-[9px] font-black text-primary uppercase hover:underline whitespace-nowrap">
+                  ⚡ Capture
+                </button>
+              </div>
+              <input type="number" value={form.tareWeight} onChange={e => { set('tareWeight', e.target.value); setTareMsg('') }}
+                placeholder="0"
+                className="w-full bg-transparent border-0 text-2xl font-black text-white outline-none placeholder:text-slate-700" />
+            </div>
+          )}
+        </div>
+
+        {/* Tare status message */}
+        {tareMsg && (
+          <p className={`text-[10px] font-bold ${hasSotredTare ? 'text-emerald-400' : 'text-amber-400'}`}>{tareMsg}</p>
+        )}
+
+        {/* Net weight + cost — live */}
+        {readyToProcess && (
+          <div className="bg-slate-800/60 border border-white/5 rounded-lg px-4 py-3 flex justify-between items-center">
+            <div>
+              <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest">Net Weight</p>
+              <p className="text-xl font-black text-white">{net.toLocaleString()} <span className="text-xs">kg</span></p>
+            </div>
+            <div>
+              <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest">Tonnage</p>
+              <p className="text-xl font-black text-slate-300">{(net / 1000).toFixed(3)} t</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest">Cost</p>
+              <p className="text-xl font-black text-primary">£{effectivePrice.toFixed(2)}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Skip ID — only for skip-sized vehicles */}
+        {isSkipSize && (
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Skip ID (optional)</label>
+            <input type="text" value={form.skipId} onChange={e => set('skipId', e.target.value)}
+              placeholder="8-001, 14-023…"
+              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2.5 rounded text-sm focus:border-primary outline-none" />
+          </div>
+        )}
+
+        {/* Payment */}
+        <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Payment</label>
             <select value={form.paymentMethod} onChange={e => set('paymentMethod', e.target.value)}
-              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm">
+              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2.5 rounded text-sm">
               <option>Invoice</option><option>Cash</option><option>Card</option>
             </select>
           </div>
-
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Amount Paid (£)</label>
-            <input type="number" value={form.amountPaid} onChange={e => set('amountPaid', e.target.value)}
-              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
-          </div>
-
-          <div className="col-span-2">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Notes</label>
-            <input type="text" value={form.wbNotes} onChange={e => set('wbNotes', e.target.value)}
-              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
-          </div>
-
-          {(gross > 0 || tare > 0) && (
-            <div className="col-span-2 bg-slate-800 border border-white/5 rounded-lg p-4 space-y-3 shadow-inner">
-              <div className="flex justify-between items-center border-b border-white/5 pb-3">
-                <div>
-                  <p className="text-[10px] text-slate-500 uppercase font-black">Net Weight</p>
-                  <p className="text-2xl font-black text-white">{net.toLocaleString()} <span className="text-xs">kg</span></p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] text-slate-500 uppercase font-black">Total Cost</p>
-                  <p className="text-2xl font-black text-primary">{displayLabel}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-[10px] text-slate-500 font-black uppercase whitespace-nowrap">Price Override (£)</label>
-                <input type="number" value={manualOverride} onChange={e => setManualOverride(e.target.value)}
-                  placeholder="Auto" min="0" step="0.01"
-                  className="w-full bg-slate-700 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
-              </div>
+          {cashPayment && (
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Amount Paid (£)</label>
+              <input type="number" value={form.amountPaid} onChange={e => set('amountPaid', e.target.value)}
+                className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2.5 rounded text-sm focus:border-primary outline-none" />
             </div>
           )}
+        </div>
 
-          <div className="col-span-2">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-1">Address</label>
-            <input type="text" value={form.address} onChange={e => set('address', e.target.value)}
-              className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
+        {/* Notes + price override */}
+        <div className="space-y-2">
+          <input type="text" value={form.wbNotes} onChange={e => set('wbNotes', e.target.value)}
+            placeholder="Notes (optional)…"
+            className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none text-slate-300 placeholder:text-slate-600" />
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] text-slate-600 font-black uppercase tracking-widest whitespace-nowrap">Price override £</span>
+            <input type="number" value={manualPrice} onChange={e => setManualPrice(e.target.value)}
+              placeholder="Auto"
+              className="w-28 bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <button
-            onClick={handleLogTipper}
-            disabled={!form.lorryReg || !form.customerName}
-            className="w-full py-3 rounded-xl font-black uppercase tracking-widest text-[11px] transition-all border border-primary/30 text-primary hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            📥 Send to Yard
-          </button>
-          <button
-            onClick={handleProcessWeight}
-            disabled={!form.lorryReg || !form.customerName || !form.grossWeight || !form.tareWeight}
-            className="w-full py-3 rounded-xl font-black uppercase tracking-widest text-[11px] transition-all shadow-lg bg-primary text-slate-900 shadow-primary/20 hover:scale-[1.02] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100"
-          >
-            📤 Process & Print Ticket
-          </button>
+        {/* Buttons — adapt to flow state */}
+        <div className="space-y-2 pt-1">
+          {/* Main action — changes based on what's been captured */}
+          {!readyToProcess && !hasSotredTare && hasGross ? (
+            // Gross captured, no tare yet — offer to park while tipping
+            <button onClick={parkWhileTipping}
+              className="w-full py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all shadow-xl bg-amber-500 text-slate-900 shadow-amber-500/20 hover:scale-[1.01]">
+              🚛 Truck Tipping — Park & Return for Outgoing Weight
+            </button>
+          ) : (
+            <button onClick={handleWeighAndTicket} disabled={processing}
+              className="w-full py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all shadow-xl bg-primary text-slate-900 shadow-primary/20 hover:scale-[1.01] disabled:opacity-60 disabled:hover:scale-100">
+              {processing ? 'Processing…' : '⚖️ Weigh & Print Ticket'}
+            </button>
+          )}
+
+          {/* If gross captured and they want to park manually */}
+          {hasGross && !readyToProcess && hasSotredTare === false && (
+            <button onClick={parkWhileTipping}
+              className="w-full py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-400 transition-colors">
+              or park in queue while tipping →
+            </button>
+          )}
         </div>
       </div>
     </div>

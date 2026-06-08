@@ -111,18 +111,13 @@ export default function CustomerPortal() {
   }
 
   async function loadCustomerData(name: string) {
-    const [{ data: ords }, { data: cls }] = await Promise.all([
-      supabase.from('orders').select('*')
-        .ilike('customer_name', name)
-        .order('date', { ascending: false })
-        .limit(100),
-      supabase.from('cash_log').select('*')
-        .ilike('customer_name', name)
-        .order('logged_at', { ascending: false })
-        .limit(100),
+    const { loadPortalOrders, loadPortalCashLogs } = await import('@/app/actions/portal')
+    const [orderRows, cashRows] = await Promise.all([
+      loadPortalOrders(name),
+      loadPortalCashLogs(name),
     ])
-    setOrders((ords ?? []) as OrderRow[])
-    setCashLogs((cls ?? []) as CashLogRow[])
+    setOrders(orderRows as OrderRow[])
+    setCashLogs(cashRows as CashLogRow[])
   }
 
   function getTotalSpend() {
@@ -173,20 +168,19 @@ export default function CustomerPortal() {
     const netPrice = DEFAULT_CONFIG.pricesSkip[bookSkipSize] ?? null
     const priceNote = netPrice ? ` [Net: £${netPrice}]` : ''
 
-    const { error } = await supabase.from('orders').insert({
-      date: collDate,
-      status: 'Booked' as any,
-      job_type: bookJobType as any,
-      skip_size: bookJobType === 'Collection' ? 'N/A' : bookSkipSize,
-      address: collAddress.trim(),
-      customer_id: customer!.id,
-      customer_name: customer!.name,
+    const { submitPortalBookingRequest } = await import('@/app/actions/portal')
+    const res = await submitPortalBookingRequest({
+      customerId: customer!.id,
+      customerName: customer!.name,
       phone: customer!.phone,
-      payment_method: 'Invoice' as any,
-      delivery_comments: `[Portal Request]${priceNote}${collNotes ? ' ' + collNotes : ''}`.trim(),
+      jobType: bookJobType,
+      skipSize: bookJobType === 'Collection' ? 'N/A' : bookSkipSize,
+      address: collAddress.trim(),
+      date: collDate,
+      notes: `[Portal Request]${priceNote}${collNotes ? ' ' + collNotes : ''}`.trim(),
     })
 
-    if (error) {
+    if (!res.success) {
       toast.error('Failed to submit request')
     } else {
       toast.success(`${bookJobType} requested! We'll confirm shortly.`)
