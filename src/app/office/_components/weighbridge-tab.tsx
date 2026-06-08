@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase-browser'
 import { DEFAULT_CONFIG, WB_SIZES } from '@/lib/config'
 import toast from 'react-hot-toast'
 import { Weight, X } from 'lucide-react'

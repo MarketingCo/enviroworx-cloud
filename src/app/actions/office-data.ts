@@ -548,3 +548,47 @@ export async function generateWtnAction(weightLogId: string) {
   if (wtnErr || !wtn) throw new Error(wtnErr?.message || 'Failed to create WTN')
   return wtn
 }
+
+export async function logFleetIssueAction(form: {
+  lorry_reg: string; issue_type: string; description: string; reported_by?: string
+}) {
+  await assertOffice()
+  const { error } = await supabaseAdmin.from('fleet_logs').insert({
+    lorry_reg: form.lorry_reg, issue_type: form.issue_type,
+    description: form.description, reported_by: form.reported_by || 'Office', status: 'Open',
+  })
+  if (error) throw new Error(error.message)
+  return { success: true }
+}
+
+export async function resolveFleetIssueAction(id: string) {
+  await assertOffice()
+  const { error } = await supabaseAdmin.from('fleet_logs')
+    .update({ status: 'Resolved', resolved_at: new Date().toISOString() } as any).eq('id', id)
+  if (error) throw new Error(error.message)
+  return { success: true }
+}
+
+export async function listCarrierLicencesAction() {
+  await assertOffice()
+  const { data, error } = await supabaseAdmin.from('carrier_licences').select('*').order('expiry_date')
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+export async function upsertCarrierLicenceAction(payload: {
+  id?: string; holder_name: string; licence_number: string; licence_type: string
+  regulator: string; issue_date?: string; expiry_date?: string; status: string; notes?: string
+}) {
+  await assertOffice()
+  const { error } = await supabaseAdmin.from('carrier_licences').upsert(payload as any)
+  if (error) throw new Error(error.message)
+  return { success: true }
+}
+
+export async function deleteCarrierLicenceAction(id: string) {
+  await assertOffice()
+  const { error } = await supabaseAdmin.from('carrier_licences').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+  return { success: true }
+}

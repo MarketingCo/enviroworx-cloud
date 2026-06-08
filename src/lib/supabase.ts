@@ -6,6 +6,7 @@
  * 2. Server client (uses service_role key, bypasses RLS)
  */
 import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
 import type { Database } from './database.types'
 import { getSupabaseServiceRoleKey } from './env'
 
@@ -22,10 +23,12 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   )
 }
 
-// Browser client (for React components)
+// Browser client — anon key, used by api.ts and server-compatible code.
+// For client components in the office app (which need the Google OAuth session),
+// import { supabase } from '@/lib/supabase-browser' instead.
 export const supabase = createClient<Database>(
-  SUPABASE_URL || 'https://missing-url.supabase.co', 
-  SUPABASE_ANON_KEY || 'missing-key', 
+  SUPABASE_URL || 'https://missing-url.supabase.co',
+  SUPABASE_ANON_KEY || 'missing-key',
   {
     realtime: {
       params: { eventsPerSecond: 10 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase-browser'
 import { SKIP_SIZES } from '@/lib/config'
 import toast from 'react-hot-toast'
 import KmlSyncButton from '@/components/KmlSyncButton'
@@ -93,7 +93,7 @@ export function MapTab() {
       supabase.from('inventory').select('*').not('latitude', 'is', null),
       supabase.from('vehicles').select('*').not('latitude', 'is', null),
       supabase.from('orders').select('*').eq('date', today).not('latitude', 'is', null),
-      supabase.from('external_map_points').select('*'),
+      (supabase.from('external_map_points').select('*') as unknown) as Promise<{data: {id:string;folder:string|null;name:string|null;description:string|null;latitude:number|null;longitude:number|null;icon:string|null;created_at:string|null}[]|null;error:unknown}>,
     ])
 
     const points = eData ?? []

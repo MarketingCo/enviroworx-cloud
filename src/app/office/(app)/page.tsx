@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase-browser'
 import { getDashboardStatsAction, getOfficeSessionAction } from '@/app/actions/office-data'
 import toast, { Toaster } from 'react-hot-toast'
 import {

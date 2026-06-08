@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import { DEFAULT_CONFIG } from '@/lib/config'
 import toast, { Toaster } from 'react-hot-toast'
 
