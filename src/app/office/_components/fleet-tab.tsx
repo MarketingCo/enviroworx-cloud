@@ -1,15 +1,15 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
-import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase-browser'
 import toast from 'react-hot-toast'
-import KmlSyncButton from '@/components/KmlSyncButton'
-import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, DollarSign, Settings, Trash2 } from 'lucide-react'
-import { getDashboardStats, getDispatchJobs, getStoredTare, searchCustomers, getCustomerTimeline, generateReport, getSkipUtilization, getLorries, getDriversList, getCustomPricingList } from '@/lib/api'
-import { assignDriverToJobAction, autoAssignJobsAction, processBookingAction, logActiveTipperAction, processWeightLogAction, markJobPaidAction, cancelBookingAction, updateDriverPinAction, updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { getLorries, getDriversList } from '@/lib/api'
+import { updateDriverPinAction } from '@/app/actions/operations'
+import { logFleetIssueAction, resolveFleetIssueAction,
+  listCarrierLicencesAction, upsertCarrierLicenceAction, deleteCarrierLicenceAction } from '@/app/actions/office-data'
 
-import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
+import { SectionHeader, Badge } from './shared'
 
 export function FleetTab() {
   const [lorries, setLorries] = useState<any[]>([])
@@ -59,23 +59,24 @@ export function FleetTab() {
   async function logIssue() {
     if (!issueForm.lorry_reg.trim() || !issueForm.description.trim()) return
     setSavingIssue(true)
-    await supabase.from('fleet_logs').insert({
-      lorry_reg: issueForm.lorry_reg.trim(),
-      issue_type: issueForm.issue_type,
-      description: issueForm.description.trim(),
-      reported_by: issueForm.reported_by.trim() || 'Office',
-      status: 'Open',
-    })
-    toast.success('Issue logged')
-    setShowLogIssue(false)
-    setIssueForm({ lorry_reg: '', issue_type: 'Mechanical', description: '', reported_by: '' })
+    try {
+      await logFleetIssueAction({
+        lorry_reg: issueForm.lorry_reg.trim(), issue_type: issueForm.issue_type,
+        description: issueForm.description.trim(), reported_by: issueForm.reported_by.trim() || 'Office',
+      })
+      toast.success('Issue logged')
+      setShowLogIssue(false)
+      setIssueForm({ lorry_reg: '', issue_type: 'Mechanical', description: '', reported_by: '' })
+    } catch (e: any) { toast.error(e.message) }
     setSavingIssue(false)
     load()
   }
 
   async function resolveIssue(id: string) {
-    await supabase.from('fleet_logs').update({ status: 'Resolved', resolved_at: new Date().toISOString() }).eq('id', id)
-    toast.success('Issue resolved')
+    try {
+      await resolveFleetIssueAction(id)
+      toast.success('Issue resolved')
+    } catch (e: any) { toast.error(e.message) }
     load()
   }
 

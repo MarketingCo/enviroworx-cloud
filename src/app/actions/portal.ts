@@ -61,3 +61,30 @@ export async function updatePortalContact(
   if (error) throw error
   return { success: true }
 }
+
+export async function submitPortalBookingRequest(form: {
+  customerId: string
+  customerName: string
+  phone: string
+  jobType: string
+  skipSize: string
+  address: string
+  date: string
+  notes?: string
+}) {
+  await requirePortalSession()
+  const { error } = await supabaseAdmin.from('orders').insert({
+    date: form.date,
+    status: 'Booked' as any,
+    job_type: form.jobType as any,
+    skip_size: form.skipSize,
+    address: form.address,
+    customer_id: form.customerId,
+    customer_name: form.customerName,
+    phone: form.phone,
+    payment_method: 'Invoice' as any,
+    delivery_comments: form.notes || '[Portal Request]',
+  })
+  if (error) throw error
+  return { success: true }
+}

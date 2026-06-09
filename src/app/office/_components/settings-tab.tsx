@@ -1,13 +1,12 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
-import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
+import { supabase } from '@/lib/supabase-browser'
 import toast from 'react-hot-toast'
-import KmlSyncButton from '@/components/KmlSyncButton'
-import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, DollarSign, Settings, Trash2 } from 'lucide-react'
-import { getDashboardStats, getDispatchJobs, getStoredTare, searchCustomers, getCustomerTimeline, generateReport, getSkipUtilization, getLorries, getDriversList, getCustomPricingList } from '@/lib/api'
-import { assignDriverToJobAction, autoAssignJobsAction, processBookingAction, logActiveTipperAction, processWeightLogAction, markJobPaidAction, cancelBookingAction, updateDriverPinAction, updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
+import { Trash2 } from 'lucide-react'
+import { SKIP_SIZES } from '@/lib/config'
+import { getCustomPricingList } from '@/lib/api'
+import { updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
 import { listOfficeStaffAction, getSetupStatusAction } from '@/app/actions/office-data'
 
 import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
@@ -40,7 +39,7 @@ export function SettingsTab() {
       getSetupStatusAction().catch(() => []),
     ])
     const cfg: any = {}
-    data?.forEach(row => { cfg[row.key] = row.value })
+    data?.forEach((row: any) => { cfg[row.key] = row.value })
     setConfig(cfg)
     setCustomRates(rates)
     setOfficeStaff(staff as typeof officeStaff)

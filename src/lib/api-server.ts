@@ -15,6 +15,11 @@ import { sendSms } from './sms'
 import { DEFAULT_CONFIG, type AppConfig } from './config'
 import { logToDrive } from '@/app/actions/drive'
 
+async function getCompanyName(): Promise<string> {
+  const { data } = await supabase.from('config').select('value').eq('key', 'company_name').maybeSingle()
+  return (data?.value as string) || DEFAULT_CONFIG.companyName || 'Enviroworx'
+}
+
 // ============================================================
 // DASHBOARD DATA (replaces getBusinessData & getRawDashboardData)
 // ============================================================
@@ -198,18 +203,30 @@ export async function processBooking(form: {
   calculatedPrice?: string
   permitCheck?: boolean
   permitWeeks?: number
+  tenantId?: string
 }) {
-  // Auto-create customer if not exists
-  let { data: customer } = await supabase
+  const tenantId = form.tenantId
+
+  // Auto-create customer if not exists (scoped to tenant)
+  const customerQuery = supabase
     .from('customers')
     .select('id')
     .ilike('name', form.customerName.trim())
-    .single()
+  if (tenantId) customerQuery.eq('tenant_id', tenantId)
+
+  let { data: customer } = await customerQuery.single()
 
   if (!customer) {
+    const newCustomerPayload: Record<string, unknown> = {
+      name: form.customerName.trim(),
+      phone: form.phone,
+      shipping_address: form.address,
+    }
+    if (tenantId) newCustomerPayload.tenant_id = tenantId
+
     const { data: newCust } = await supabase
       .from('customers')
-      .insert({ name: form.customerName.trim(), phone: form.phone, shipping_address: form.address })
+      .insert(newCustomerPayload as any)
       .select('id')
       .single()
     customer = newCust
@@ -223,7 +240,7 @@ export async function processBooking(form: {
   if (effectivePrice) notes += ` [Net: £${effectivePrice}${customSkipPrice !== null ? ' (Custom)' : ''}]`
   if (form.permitCheck) notes += ` [Permit: ${form.permitWeeks || 1} Wk]`
 
-  const { error } = await supabase.from('orders').insert({
+  const orderPayload: Record<string, unknown> = {
     date: form.deliveryDate,
     status: 'Booked' as any,
     skip_size: form.skipSize,
@@ -234,7 +251,10 @@ export async function processBooking(form: {
     phone: form.phone,
     payment_method: form.paymentMethod as any,
     delivery_comments: notes.trim(),
-  })
+  }
+  if (tenantId) orderPayload.tenant_id = tenantId
+
+  const { error } = await supabase.from('orders').insert(orderPayload as any)
 
   if (error) throw error
   return { success: true, message: '✅ Job Booked!' }
@@ -256,6 +276,7 @@ export async function placeSkipOnMap(form: {
   longitude: number
   deliveryDate?: string
   comments?: string
+  tenantId?: string
 }) {
   if (!form.skipSize) return { success: false, message: '❌ Select a skip size' }
   if (typeof form.latitude !== 'number' || typeof form.longitude !== 'number') {
@@ -267,20 +288,23 @@ export async function placeSkipOnMap(form: {
     form.skipId?.trim() ||
     `MAP-${form.skipSize}-${Date.now().toString(36).toUpperCase()}`
 
+  const upsertPayload: Record<string, unknown> = {
+    skip_id: skipId,
+    skip_size: form.skipSize,
+    customer_name: form.customerName?.trim() || null,
+    customer_phone: form.customerPhone?.trim() || null,
+    delivery_address: form.address?.trim() || null,
+    delivery_date: form.deliveryDate || new Date().toISOString(),
+    latitude: form.latitude,
+    longitude: form.longitude,
+    comments: form.comments?.trim() || null,
+    status: 'In Use' as any,
+    updated_at: new Date().toISOString(),
+  }
+  if (form.tenantId) upsertPayload.tenant_id = form.tenantId
+
   const { error } = await supabase.from('inventory').upsert(
-    {
-      skip_id: skipId,
-      skip_size: form.skipSize,
-      customer_name: form.customerName?.trim() || null,
-      customer_phone: form.customerPhone?.trim() || null,
-      delivery_address: form.address?.trim() || null,
-      delivery_date: form.deliveryDate || new Date().toISOString(),
-      latitude: form.latitude,
-      longitude: form.longitude,
-      comments: form.comments?.trim() || null,
-      status: 'In Use' as any,
-      updated_at: new Date().toISOString(),
-    },
+    upsertPayload as any,
     { onConflict: 'skip_id' }
   )
 
@@ -328,11 +352,12 @@ export async function logActiveTipper(form: {
   address: string
   skipSize: string
   skipId?: string
+  tenantId?: string
 }) {
   if (!form.skipSize) return { success: false, message: '❌ ERROR: Select Size!' }
   if (!form.lorryReg) return { success: false, message: '❌ ERROR: Enter Reg!' }
 
-  const { error } = await supabase.from('active_tippers').insert({
+  const payload: Record<string, unknown> = {
     reg: form.lorryReg,
     customer_name: form.customerName,
     waste_type: form.wasteType,
@@ -340,7 +365,10 @@ export async function logActiveTipper(form: {
     address: form.address || 'Unknown',
     skip_size: form.skipSize,
     skip_id: form.skipId || null,
-  })
+  }
+  if (form.tenantId) payload.tenant_id = form.tenantId
+
+  const { error } = await supabase.from('active_tippers').insert(payload as any)
 
   if (error) throw error
   return { success: true, message: `📥 Truck ${form.lorryReg} logged IN.` }
@@ -362,6 +390,9 @@ export async function processWeightLog(form: {
   tylRef?: string
   wbNotes?: string
   tipperRowIndex?: string
+  ewcCodeId?: string
+  ewcCode?: string
+  tenantId?: string
 }) {
   if (form.wasteType === 'TBC') return { success: false, message: '❌ ERROR: Waste Type Required!' }
 
@@ -389,7 +420,7 @@ export async function processWeightLog(form: {
   const costGross = costNet * (1 + config.vatRate)
 
   // Insert weight log
-  const { data: weightLog, error: wlError } = await supabase.from('weight_logs').insert({
+  const wlPayload: Record<string, unknown> = {
     customer_name: form.customerName,
     lorry_reg: form.lorryReg,
     skip_size: form.skipSize,
@@ -400,12 +431,17 @@ export async function processWeightLog(form: {
     tare_weight: tare,
     direction: form.direction as any,
     notes: form.wbNotes || null,
-  }).select('ticket_number').single()
+    ewc_code_id: form.ewcCodeId || null,
+    ewc_code: form.ewcCode || null,
+  }
+  if (form.tenantId) wlPayload.tenant_id = form.tenantId
+
+  const { data: weightLog, error: wlError } = await supabase.from('weight_logs').insert(wlPayload as any).select('ticket_number, id').single()
 
   if (wlError) throw wlError
 
   // Insert cash log
-  await supabase.from('cash_log').insert({
+  const clPayload: Record<string, unknown> = {
     ticket_number: weightLog.ticket_number,
     customer_name: form.customerName,
     skip_size: form.skipSize,
@@ -419,7 +455,10 @@ export async function processWeightLog(form: {
     payment_method: (form.paymentMethod || 'Invoice') as any,
     tyl_ref: form.tylRef || null,
     comments: form.wbNotes || null,
-  })
+  }
+  if (form.tenantId) clPayload.tenant_id = form.tenantId
+
+  await supabase.from('cash_log').insert(clPayload as any)
 
   if (form.paymentMethod === 'Cash') {
     await logToDrive({
@@ -498,7 +537,7 @@ export async function getDriverJobs(driverName: string) {
       const { data: skip } = await supabase
         .from('inventory')
         .select('skip_id')
-        .ilike('customer_name', job.customer_name)
+        .ilike('customer_name', job.customer_name ?? '')
         .in('status', ['Delivered', 'In Use'])
         .limit(1)
         .single()
@@ -575,24 +614,29 @@ export async function driverAbortJob(orderId: string, reason: string) {
 // SHIFTS & TIME TRACKING (replaces verifyPINAndClock)
 // ============================================================
 
-export async function clockInOut(driverName: string, pin: string, action: 'IN' | 'OUT', lorryReg?: string) {
-  // Verify PIN
-  const { data: driver } = await supabase
+export async function clockInOut(driverName: string, pin: string, action: 'IN' | 'OUT', lorryReg?: string, tenantId?: string) {
+  // Verify PIN (scoped to tenant)
+  const driverQuery = supabase
     .from('drivers')
     .select('*')
     .eq('name', driverName)
-    .eq('pin', pin)
-    .single()
+    .eq('pin_code', pin)
+  if (tenantId) driverQuery.eq('tenant_id', tenantId)
+
+  const { data: driver } = await driverQuery.single()
 
   if (!driver) return { success: false, message: '❌ Invalid PIN for ' + driverName }
 
   if (action === 'IN') {
-    const { data: shift } = await supabase.from('shifts').insert({
+    const shiftPayload: Record<string, unknown> = {
       employee: driverName,
-      date: new Date().toISOString().split('T')[0],
+      shift_date: new Date().toISOString().split('T')[0],
       role_or_lorry: lorryReg || 'Driver',
       clock_in: new Date().toISOString(),
-    }).select('id').single()
+    }
+    if (tenantId) shiftPayload.tenant_id = tenantId
+
+    const { data: shift } = await supabase.from('shifts').insert(shiftPayload as any).select('id').single()
 
     return { success: true, shiftId: shift?.id, driverName, message: `👋 Welcome ${driverName}. Clocked IN.` }
   }
@@ -1037,7 +1081,7 @@ export async function getDriversList() {
 }
 
 export async function updateDriverPin(id: string, pin: string) {
-  const { error } = await supabase.from('drivers').update({ pin }).eq('id', id)
+  const { error } = await supabase.from('drivers').update({ pin_code: pin }).eq('id', id)
   if (error) throw error
   return { success: true }
 }
@@ -1064,4 +1108,25 @@ function getWeekStart() {
   const diff = d.getDate() - day + (day === 0 ? -6 : 1)
   const monday = new Date(d.setDate(diff))
   return monday.toISOString().split('T')[0]
+}
+
+export async function sendOverstaySms(skipId: string) {
+  const { data: skip, error } = await supabase
+    .from('inventory')
+    .select('skip_id, skip_size, customer_name, customer_phone, delivery_address, delivery_date, comments')
+    .eq('skip_id', skipId)
+    .single()
+  if (error || !skip) return { success: false, message: 'Skip not found' }
+  if (!skip.customer_phone) return { success: false, message: 'No phone number for this customer' }
+  const days = skip.delivery_date
+    ? Math.round((Date.now() - new Date(skip.delivery_date).getTime()) / 86400000)
+    : null
+  const companyName = await getCompanyName()
+  const daysText = days !== null ? ` for ${days} days` : ''
+  const message =
+    `Hi ${skip.customer_name ?? 'there'}, your ${skip.skip_size}yd skip at ${skip.delivery_address ?? 'your site'} has been in position${daysText}. ` +
+    `Please call ${DEFAULT_CONFIG.officePhone} to arrange collection or extend your hire. ${companyName}.`
+  const res = await sendSms(skip.customer_phone, message)
+  if (!res.success) return { success: false, message: 'SMS failed to send' }
+  return { success: true, message: `SMS sent to ${skip.customer_phone}` }
 }

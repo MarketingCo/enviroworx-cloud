@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { verifyCronAuth } from '@/lib/auth'
 import { supabaseAdmin, safeActivityLog } from '@/lib/supabase'
 import { sendSms } from '@/lib/sms'
+import { DEFAULT_CONFIG } from '@/lib/config'
 
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
     tomorrow.setDate(tomorrow.getDate() + 1)
     const tomorrowStr = tomorrow.toISOString().split('T')[0]
 
-    // Find collections scheduled for tomorrow
+    // 1. Booked-collection reminders: SMS customers whose collection is tomorrow
     const { data: collections, error } = await supabaseAdmin
       .from('orders')
       .select('*')
@@ -28,21 +29,56 @@ export async function GET(request: Request) {
     let sent = 0
     for (const col of collections || []) {
       if (!col.phone) continue
-
       const message = `Hi ${col.customer_name}, this is Enviroworx. Just a reminder that we are scheduled to collect your skip tomorrow (${tomorrowStr}) at ${col.address}. Please ensure access is clear. Thanks!`
-      
       const res = await sendSms(col.phone, message)
       if (res.success) sent++
     }
 
-    // Log the activity
+    // 2. Overstay reminders: SMS customers whose skip has been out > demurrageDays
+    //    Only send once every 7 days (check comments field for last reminder date)
+    const overstayCutoff = new Date()
+    overstayCutoff.setDate(overstayCutoff.getDate() - (DEFAULT_CONFIG.demurrageDays || 28))
+    const cutoffStr = overstayCutoff.toISOString()
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+
+    const { data: overstays } = await supabaseAdmin
+      .from('inventory')
+      .select('skip_id, skip_size, customer_name, customer_phone, delivery_address, delivery_date, comments')
+      .in('status', ['Delivered', 'In Use'])
+      .not('customer_phone', 'is', null)
+      .lt('delivery_date', cutoffStr)
+
+    let overstaySent = 0
+    for (const skip of overstays || []) {
+      if (!skip.customer_phone) continue
+      // Skip if already reminded in last 7 days
+      if (skip.comments?.includes('[OVERSTAY_SMS:') ) {
+        const match = skip.comments.match(/\[OVERSTAY_SMS:(\d{4}-\d{2}-\d{2})/)
+        if (match && match[1] > sevenDaysAgo.split('T')[0]) continue
+      }
+      const days = skip.delivery_date
+        ? Math.round((Date.now() - new Date(skip.delivery_date).getTime()) / 86400000)
+        : DEFAULT_CONFIG.demurrageDays
+      const message =
+        `Hi ${skip.customer_name ?? 'there'}, your ${skip.skip_size}yd skip at ${skip.delivery_address ?? 'your site'} has been in position for ${days} days. ` +
+        `Please call ${DEFAULT_CONFIG.officePhone} to arrange collection or extend your hire. Enviroworx.`
+      const res = await sendSms(skip.customer_phone, message)
+      if (res.success) {
+        overstaySent++
+        // Record reminder date in comments to prevent daily repeat
+        const tag = `[OVERSTAY_SMS:${new Date().toISOString().split('T')[0]}]`
+        const newComments = ((skip.comments || '') + ' ' + tag).trim()
+        await supabaseAdmin.from('inventory').update({ comments: newComments }).eq('skip_id', skip.skip_id)
+      }
+    }
+
     await safeActivityLog({
       type: 'SYS',
-      message: `Sent ${sent} collection reminders for ${tomorrowStr}`,
+      message: `Sent ${sent} collection reminders + ${overstaySent} overstay reminders`,
       status: 'Completed'
     })
 
-    return NextResponse.json({ success: true, remindersSent: sent })
+    return NextResponse.json({ success: true, remindersSent: sent, overstaySent })
   } catch (error: any) {
     console.error('SMS Reminder Cron Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
