@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase-browser'
-import { SKIP_SIZES } from '@/lib/config'
+import { SKIP_SIZES, DEFAULT_CONFIG } from '@/lib/config'
 import toast from 'react-hot-toast'
 import KmlSyncButton from '@/components/KmlSyncButton'
 import { MapPin, X } from 'lucide-react'
@@ -15,7 +15,19 @@ import { getMapDataAction } from '@/app/actions/office-data'
 
 const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 const EDINBURGH = { lat: 55.9533, lng: -3.1883 }
-const PIN = (c: string) => `https://maps.google.com/mapfiles/ms/icons/${c}-dot.png`
+// Advanced markers need a vector map, which needs a map id.
+const MAP_ID = 'ENVIROWORX_OFFICE_MAP'
+
+function makePin(opts: { background: string; glyphText?: string; scale?: number; borderColor?: string }) {
+  const g = (window as any).google
+  return new g.maps.marker.PinElement({
+    background: opts.background,
+    borderColor: opts.borderColor || 'rgba(0,0,0,0.25)',
+    glyphColor: '#ffffff',
+    glyph: opts.glyphText ?? '',
+    scale: opts.scale ?? 1,
+  }).element
+}
 
 // Load the Google Maps JS API once for the whole app.
 let gmapsPromise: Promise<void> | null = null
@@ -25,10 +37,16 @@ function loadGoogleMaps(): Promise<void> {
   if (gmapsPromise) return gmapsPromise
   gmapsPromise = new Promise<void>((resolve, reject) => {
     const s = document.createElement('script')
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&loading=async`
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&libraries=marker,places&loading=async`
     s.async = true
     s.defer = true
-    s.onload = () => resolve()
+    s.onload = () => {
+      // Make sure the marker library is initialised before anything builds pins.
+      ;(window as any).google.maps
+        .importLibrary('marker')
+        .then(() => resolve())
+        .catch(() => reject(new Error('Failed to load Google Maps marker library')))
+    }
     s.onerror = () => reject(new Error('Failed to load Google Maps'))
     document.head.appendChild(s)
   })
@@ -129,6 +147,7 @@ export function MapTab() {
     const map = new g.maps.Map(el, {
       center: EDINBURGH,
       zoom: 11,
+      mapId: MAP_ID,
       mapTypeControl: true,
       streetViewControl: true,
       fullscreenControl: true,
@@ -158,7 +177,9 @@ export function MapTab() {
     const map = mapRef.current
     if (!g || !map) return
 
-    markersRef.current.forEach((m) => m.setMap(null))
+    markersRef.current.forEach((m) => {
+      m.map = null
+    })
     markersRef.current = []
     const bounds = new g.maps.LatLngBounds()
     let any = false
@@ -172,7 +193,7 @@ export function MapTab() {
     const openInfo = (marker: any, html: string, onReady?: () => void) => {
       marker.addListener('click', () => {
         infoRef.current.setContent(html)
-        infoRef.current.open(map, marker)
+        infoRef.current.open({ map, anchor: marker })
         if (onReady) g.maps.event.addListenerOnce(infoRef.current, 'domready', onReady)
       })
     }
@@ -187,16 +208,24 @@ export function MapTab() {
           const days = skip.delivery_date
             ? Math.floor((Date.now() - new Date(skip.delivery_date).getTime()) / 86400000)
             : 0
-          const marker = new g.maps.Marker({
+          const overstay = days > (DEFAULT_CONFIG.demurrageDays || 28)
+          const size = String(skip.skip_size ?? '').replace(/yd$/i, '')
+          const marker = new g.maps.marker.AdvancedMarkerElement({
             position: { lat, lng },
             map,
-            draggable: true,
-            icon: PIN('green'),
+            gmpDraggable: true,
+            content: makePin({
+              background: overstay ? '#f59e0b' : '#10b981',
+              glyphText: overstay ? `${size}!` : size,
+            }),
             title: `${skip.skip_size}yd — ${skip.customer_name || 'Skip'}`,
           })
           marker.addListener('dragend', async (e: any) => {
+            const pos = e?.latLng ?? marker.position
+            const newLat = typeof pos.lat === 'function' ? pos.lat() : pos.lat
+            const newLng = typeof pos.lng === 'function' ? pos.lng() : pos.lng
             try {
-              await moveSkipLocationAction(skip.id, e.latLng.lat(), e.latLng.lng())
+              await moveSkipLocationAction(skip.id, newLat, newLng)
               toast.success('Skip moved')
             } catch {
               toast.error('Could not move skip')
@@ -243,10 +272,13 @@ export function MapTab() {
         const lat = Number(o.latitude)
         const lng = Number(o.longitude)
         const isCollection = o.job_type === 'Collection'
-        const marker = new g.maps.Marker({
+        const marker = new g.maps.marker.AdvancedMarkerElement({
           position: { lat, lng },
           map,
-          icon: PIN(isCollection ? 'yellow' : 'blue'),
+          content: makePin({
+            background: isCollection ? '#f59e0b' : '#3b82f6',
+            glyphText: isCollection ? 'C' : 'D',
+          }),
           title: `${o.job_type} — ${o.customer_name}`,
         })
         openInfo(
@@ -271,11 +303,15 @@ export function MapTab() {
           ? Math.floor((Date.now() - new Date(v.last_updated).getTime()) / 60000)
           : 9999
         if (mins > 1440) return // offline > 24h
-        const marker = new g.maps.Marker({
+        const reg = v.registration || v.reg || ''
+        const marker = new g.maps.marker.AdvancedMarkerElement({
           position: { lat, lng },
           map,
-          icon: PIN('red'),
-          title: v.registration || v.reg || 'Truck',
+          content: makePin({
+            background: '#ef4444',
+            glyphText: reg ? reg.replace(/\s/g, '').slice(-3) : '🚛',
+          }),
+          title: reg || 'Truck',
         })
         openInfo(
           marker,
@@ -294,10 +330,10 @@ export function MapTab() {
       if (!visibleLayers[p.folder || 'Unknown']) return
       const lat = Number(p.latitude)
       const lng = Number(p.longitude)
-      const marker = new g.maps.Marker({
+      const marker = new g.maps.marker.AdvancedMarkerElement({
         position: { lat, lng },
         map,
-        icon: PIN('purple'),
+        content: makePin({ background: '#8b5cf6', scale: 0.8 }),
         title: p.name || p.folder,
       })
       openInfo(
