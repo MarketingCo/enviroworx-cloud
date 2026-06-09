@@ -6,6 +6,7 @@ import { SKIP_SIZES, DEFAULT_CONFIG } from '@/lib/config'
 import toast from 'react-hot-toast'
 import KmlSyncButton from '@/components/KmlSyncButton'
 import { MapPin, X } from 'lucide-react'
+import { MarkerClusterer } from '@googlemaps/markerclusterer'
 import {
   placeSkipOnMapAction,
   moveSkipLocationAction,
@@ -81,6 +82,8 @@ export function MapTab() {
 
   const mapRef = useRef<any>(null)
   const markersRef = useRef<any[]>([])
+  const skipClusterRef = useRef<MarkerClusterer | null>(null)
+  const legacyClusterRef = useRef<MarkerClusterer | null>(null)
   const infoRef = useRef<any>(null)
   const fitDoneRef = useRef(false)
 
@@ -181,11 +184,22 @@ export function MapTab() {
       m.map = null
     })
     markersRef.current = []
+    skipClusterRef.current?.clearMarkers()
+    legacyClusterRef.current?.clearMarkers()
     const bounds = new g.maps.LatLngBounds()
     let any = false
 
     const add = (marker: any, lat: number, lng: number) => {
       markersRef.current.push(marker)
+      bounds.extend({ lat, lng })
+      any = true
+    }
+
+    // Skips + legacy points cluster; orders/trucks stay individual pins.
+    const skipMarkers: any[] = []
+    const legacyMarkers: any[] = []
+    const addClustered = (collection: any[], marker: any, lat: number, lng: number) => {
+      collection.push(marker)
       bounds.extend({ lat, lng })
       any = true
     }
@@ -212,7 +226,6 @@ export function MapTab() {
           const size = String(skip.skip_size ?? '').replace(/yd$/i, '')
           const marker = new g.maps.marker.AdvancedMarkerElement({
             position: { lat, lng },
-            map,
             gmpDraggable: true,
             content: makePin({
               background: overstay ? '#f59e0b' : '#10b981',
@@ -262,7 +275,7 @@ export function MapTab() {
                 }
               }
           })
-          add(marker, lat, lng)
+          addClustered(skipMarkers, marker, lat, lng)
         })
     }
 
@@ -332,7 +345,6 @@ export function MapTab() {
       const lng = Number(p.longitude)
       const marker = new g.maps.marker.AdvancedMarkerElement({
         position: { lat, lng },
-        map,
         content: makePin({ background: '#8b5cf6', scale: 0.8 }),
         title: p.name || p.folder,
       })
@@ -344,8 +356,13 @@ export function MapTab() {
            <p style="font-size:11px;color:#475569;margin:4px 0 0;">${p.description || ''}</p>
          </div>`
       )
-      add(marker, lat, lng)
+      addClustered(legacyMarkers, marker, lat, lng)
     })
+
+    if (!skipClusterRef.current) skipClusterRef.current = new MarkerClusterer({ map })
+    if (!legacyClusterRef.current) legacyClusterRef.current = new MarkerClusterer({ map })
+    skipClusterRef.current.addMarkers(skipMarkers)
+    legacyClusterRef.current.addMarkers(legacyMarkers)
 
     if (any && !fitDoneRef.current) {
       mapRef.current.fitBounds(bounds)
