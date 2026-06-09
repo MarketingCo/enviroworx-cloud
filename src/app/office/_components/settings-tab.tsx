@@ -117,7 +117,7 @@ export function SettingsTab() {
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 mt-4">
             {Object.entries(config.prices_skip || {}).map(([size, price]: [string, any]) => (
               <div key={size} className="flex flex-col gap-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">{size}yd Skip</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase">{size}yd Skip</label>
                 <div className="flex items-center gap-2">
                   <span className="text-slate-600 font-bold text-xs">£</span>
                   <input
@@ -141,7 +141,7 @@ export function SettingsTab() {
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 mt-4">
             {Object.entries(config.prices_waste || {}).map(([type, price]: [string, any]) => (
               <div key={type} className="flex flex-col gap-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">{type}</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase">{type}</label>
                 <div className="flex items-center gap-2">
                   <span className="text-slate-600 font-bold text-xs">£</span>
                   <input
@@ -162,11 +162,11 @@ export function SettingsTab() {
         {/* Profitability Calc */}
         <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl">
           <SectionHeader title="Profitability Calc (Disposal Costs)" />
-          <p className="text-[9px] text-slate-500 mb-4 uppercase font-bold italic tracking-tighter">Your actual costs per tonne at the tip.</p>
+          <p className="text-xs text-slate-500 mb-4 uppercase font-bold tracking-tighter">Your actual costs per tonne at the tip.</p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-3">
             {Object.entries(config.disposal_costs || {}).map(([type, cost]: [string, any]) => (
               <div key={type} className="flex flex-col gap-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">{type}</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase">{type}</label>
                 <div className="flex items-center gap-2">
                   <span className="text-slate-600 font-bold text-xs">£</span>
                   <input
@@ -190,7 +190,7 @@ export function SettingsTab() {
         <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 shadow-xl flex flex-col h-[500px]">
           <SectionHeader title="Special Customer Rates (Overrides)" />
           <div className="bg-slate-950/50 p-4 rounded-xl border border-white/5 mb-4">
-            <p className="text-[10px] font-black text-primary uppercase mb-3 italic">Add New Override</p>
+            <p className="text-xs font-black text-primary uppercase mb-3">Add New Override</p>
             <div className="grid grid-cols-2 gap-3">
               <input type="text" placeholder="Customer Name" value={newRate.customer_name} onChange={e => setNewRate({ ...newRate, customer_name: e.target.value })}
                 className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
@@ -212,7 +212,7 @@ export function SettingsTab() {
               <div key={r.id} className="bg-slate-800/50 border border-white/5 p-3 rounded-lg flex justify-between items-center group">
                 <div>
                   <p className="text-white font-bold text-sm">{r.customer_name}</p>
-                  <p className="text-[10px] text-slate-500 uppercase font-black">
+                  <p className="text-xs text-slate-500 uppercase font-black">
                     {r.skip_size ? `${r.skip_size}yd Skip` : r.waste_type || 'General'} Override
                   </p>
                 </div>
@@ -224,7 +224,7 @@ export function SettingsTab() {
                 </div>
               </div>
             ))}
-            {customRates.length === 0 && <p className="text-center text-slate-600 text-sm mt-10 italic">No custom rates configured</p>}
+            {customRates.length === 0 && <p className="text-center text-slate-600 text-sm mt-10">No custom rates configured</p>}
           </div>
         </div>
 
@@ -233,37 +233,37 @@ export function SettingsTab() {
           <SectionHeader title="Branding Protocol" />
           <div className="space-y-4 flex-1">
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-black text-slate-500 uppercase">Registered Name</label>
+              <label className="text-[11px] font-black text-slate-500 uppercase">Registered Name</label>
               <input type="text" defaultValue={config.company_info?.name} onBlur={e => handleSave('company_info', { ...config.company_info, name: e.target.value })}
                 className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm w-full outline-none" />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-black text-slate-500 uppercase">Registered Address</label>
+              <label className="text-[11px] font-black text-slate-500 uppercase">Registered Address</label>
               <textarea defaultValue={config.company_info?.address} onBlur={e => handleSave('company_info', { ...config.company_info, address: e.target.value })}
                 className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm w-full h-24 focus:border-primary outline-none" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">Office Phone</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase">Office Phone</label>
                 <input type="text" defaultValue={config.company_info?.phone} onBlur={e => handleSave('company_info', { ...config.company_info, phone: e.target.value })}
                   className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase">Waste Carrier Licence</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase">Waste Carrier Licence</label>
                 <input type="text" defaultValue={config.company_info?.waste_licence} onBlur={e => handleSave('company_info', { ...config.company_info, waste_licence: e.target.value })}
                   className="bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none" />
               </div>
             </div>
             
             <div className="bg-slate-950/50 p-4 rounded-xl border border-white/5 mt-4">
-              <p className="text-[10px] font-black text-primary uppercase mb-3 italic">Banking details</p>
+              <p className="text-xs font-black text-primary uppercase mb-3">Banking details</p>
               <div className="grid grid-cols-3 gap-3">
                 <input type="text" placeholder="Bank" defaultValue={config.company_info?.bank_name} onBlur={e => handleSave('company_info', { ...config.company_info, bank_name: e.target.value })}
-                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-[10px] outline-none" />
+                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-xs outline-none" />
                 <input type="text" placeholder="Sort Code" defaultValue={config.company_info?.sort_code} onBlur={e => handleSave('company_info', { ...config.company_info, sort_code: e.target.value })}
-                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-[10px] outline-none" />
+                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-xs outline-none" />
                 <input type="text" placeholder="Account #" defaultValue={config.company_info?.account_number} onBlur={e => handleSave('company_info', { ...config.company_info, account_number: e.target.value })}
-                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-[10px] outline-none" />
+                  className="bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-xs outline-none" />
               </div>
             </div>
           </div>
@@ -289,7 +289,7 @@ export function SettingsTab() {
                   <p className="text-white font-semibold">{s.display_name || s.email}</p>
                   <p className="text-xs text-slate-500">{s.email}</p>
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-primary">
+                <span className="text-[11px] font-black uppercase tracking-widest text-primary">
                   {s.role}
                   {!s.active ? ' · inactive' : ''}
                 </span>
