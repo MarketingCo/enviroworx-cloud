@@ -13,10 +13,11 @@ export async function syncOrderToQuickBooks(orderId: string) {
       entityType: 'order',
       entityId: orderId,
     },
-    async () => {
+    async (session) => {
       const { data: order, error: fetchError } = await supabaseAdmin
         .from('orders')
         .select('*')
+        .eq('tenant_id', session.tenantId)
         .eq('id', orderId)
         .single()
 
@@ -25,6 +26,7 @@ export async function syncOrderToQuickBooks(orderId: string) {
       const { data: cashLog } = await supabaseAdmin
         .from('cash_log')
         .select('*')
+        .eq('tenant_id', session.tenantId)
         .eq('ticket_number', order.skip_id_used || '')
         .maybeSingle()
 
@@ -44,6 +46,7 @@ export async function syncOrderToQuickBooks(orderId: string) {
         .update({
           comments: `${order.comments || ''}\n[QB Sync: ${qbInvoice.Id}]`.trim(),
         })
+        .eq('tenant_id', session.tenantId)
         .eq('id', orderId)
 
       return { success: true, qbId: qbInvoice.Id }

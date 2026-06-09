@@ -1,7 +1,6 @@
 'use server'
 
 import { requireDriverSession } from '@/lib/session'
-import { requireOfficeSession } from '@/lib/session'
 import { withOfficeAction } from '@/lib/office-action'
 import { writeAudit, auditFromSession } from '@/lib/audit'
 import { toActionError } from '@/lib/action-errors'
@@ -20,7 +19,7 @@ export async function assignDriverToJobAction(
       entityId: orderId,
       metadata: { driverName, driverId },
     },
-    () => server.assignDriverToJob(orderId, driverName, driverId)
+    (session) => server.assignDriverToJob(session.tenantId, orderId, driverName, driverId)
   )
 }
 
@@ -31,7 +30,7 @@ export async function autoAssignJobsAction(targetDate: string) {
       message: `Auto-assign jobs for ${targetDate}`,
       metadata: { targetDate },
     },
-    () => server.autoAssignJobs(targetDate)
+    (session) => server.autoAssignJobs(session.tenantId, targetDate)
   )
 }
 
@@ -76,14 +75,14 @@ export async function placeSkipOnMapAction(
 export async function moveSkipLocationAction(id: string, latitude: number, longitude: number) {
   return withOfficeAction(
     { type: 'skip.move', message: 'Moved skip pin', entityType: 'inventory', entityId: id },
-    () => server.moveSkipLocation(id, latitude, longitude)
+    (session) => server.moveSkipLocation(session.tenantId, id, latitude, longitude)
   )
 }
 
 export async function collectSkipFromMapAction(id: string) {
   return withOfficeAction(
     { type: 'skip.collect', message: 'Collected skip', entityType: 'inventory', entityId: id },
-    () => server.collectSkipFromMap(id)
+    (session) => server.collectSkipFromMap(session.tenantId, id)
   )
 }
 
@@ -108,7 +107,7 @@ export async function markJobPaidAction(id: string, source: 'Orders' | 'CashLog'
       entityType: source === 'Orders' ? 'order' : 'cash_log',
       entityId: id,
     },
-    () => server.markJobPaid(id, source)
+    (session) => server.markJobPaid(session.tenantId, id, source)
   )
 }
 
@@ -120,19 +119,19 @@ export async function cancelBookingAction(orderId: string) {
       entityType: 'order',
       entityId: orderId,
     },
-    () => server.cancelBooking(orderId)
+    (session) => server.cancelBooking(session.tenantId, orderId)
   )
 }
 
 export async function addCustomPriceAction(
-  payload: Parameters<typeof server.addCustomPrice>[0]
+  payload: Parameters<typeof server.addCustomPrice>[1]
 ) {
   return withOfficeAction(
     {
       type: 'settings.custom_price_add',
       message: `Custom price: ${payload.customer_name}`,
     },
-    () => server.addCustomPrice(payload)
+    (session) => server.addCustomPrice(session.tenantId, payload)
   )
 }
 
@@ -144,7 +143,7 @@ export async function deleteCustomPriceAction(id: string) {
       entityType: 'custom_pricing',
       entityId: id,
     },
-    () => server.deleteCustomPrice(id)
+    (session) => server.deleteCustomPrice(session.tenantId, id)
   )
 }
 
@@ -156,7 +155,7 @@ export async function updateDriverPinAction(id: string, pin: string) {
       entityType: 'driver',
       entityId: id,
     },
-    () => server.updateDriverPin(id, pin)
+    (session) => server.updateDriverPin(session.tenantId, id, pin)
   )
 }
 
@@ -167,14 +166,36 @@ export async function updateConfigAction(key: string, value: unknown) {
       message: `Config updated: ${key}`,
       metadata: { key },
     },
-    () => server.updateConfig(key, value)
+    (session) => server.updateConfig(session.tenantId, key, value)
   )
 }
 
-export async function completeJobAction(form: Parameters<typeof server.completeJob>[0]) {
+export async function updateLorryAction(
+  id: string,
+  updates: Parameters<typeof server.updateLorry>[2]
+) {
+  return withOfficeAction(
+    {
+      type: 'fleet.lorry_update',
+      message: 'Lorry updated',
+      entityType: 'lorry',
+      entityId: id,
+      metadata: { ...updates },
+    },
+    (session) => server.updateLorry(session.tenantId, id, updates)
+  )
+}
+
+/** Driver app: jobs for the signed-in driver (identity comes from the session). */
+export async function getDriverJobsAction() {
+  const session = await requireDriverSession()
+  return server.getDriverJobs(session.tenantId, session.name)
+}
+
+export async function completeJobAction(form: Parameters<typeof server.completeJob>[1]) {
   const session = await requireDriverSession()
   try {
-    const result = await server.completeJob(form)
+    const result = await server.completeJob(session.tenantId, form)
     await writeAudit(
       auditFromSession(session, {
         type: 'driver.complete',
@@ -193,7 +214,7 @@ export async function completeJobAction(form: Parameters<typeof server.completeJ
 export async function driverAbortJobAction(orderId: string, reason: string) {
   const session = await requireDriverSession()
   try {
-    const result = await server.driverAbortJob(orderId, reason)
+    const result = await server.driverAbortJob(session.tenantId, orderId, reason)
     await writeAudit(
       auditFromSession(session, {
         type: 'driver.abort',
@@ -216,7 +237,7 @@ export async function clockInOutAction(
 ) {
   const session = await requireDriverSession()
   try {
-    const result = await server.clockInOut(driverName, pin, action, lorryReg, session.tenantId)
+    const result = await server.clockInOut(session.tenantId, driverName, pin, action, lorryReg)
     await writeAudit(
       auditFromSession(session, {
         type: action === 'IN' ? 'driver.clock_in' : 'driver.clock_out',
@@ -231,11 +252,11 @@ export async function clockInOutAction(
 }
 
 export async function driverLogFleetIssueAction(
-  form: Parameters<typeof server.driverLogFleetIssue>[0]
+  form: Parameters<typeof server.driverLogFleetIssue>[1]
 ) {
   const session = await requireDriverSession()
   try {
-    const result = await server.driverLogFleetIssue(form)
+    const result = await server.driverLogFleetIssue(session.tenantId, form)
     await writeAudit(
       auditFromSession(session, {
         type: 'driver.fleet_issue',
@@ -249,11 +270,11 @@ export async function driverLogFleetIssueAction(
 }
 
 export async function driverLogYardTipAction(
-  form: Parameters<typeof server.driverLogYardTip>[0]
+  form: Parameters<typeof server.driverLogYardTip>[1]
 ) {
   const session = await requireDriverSession()
   try {
-    const result = await server.driverLogYardTip(form)
+    const result = await server.driverLogYardTip(session.tenantId, form)
     await writeAudit(
       auditFromSession(session, {
         type: 'driver.yard_tip',
@@ -269,7 +290,7 @@ export async function driverLogYardTipAction(
 export async function driverToggleBreakAction(driverName: string, action: 'START' | 'END') {
   const session = await requireDriverSession()
   try {
-    const result = await server.driverToggleBreak(driverName, action)
+    const result = await server.driverToggleBreak(session.tenantId, driverName, action)
     await writeAudit(
       auditFromSession(session, {
         type: 'driver.break',
@@ -285,11 +306,11 @@ export async function driverToggleBreakAction(driverName: string, action: 'START
 
 export async function driverUpdateJobAction(
   orderId: string,
-  updates: Parameters<typeof server.driverUpdateJob>[1]
+  updates: Parameters<typeof server.driverUpdateJob>[2]
 ) {
   const session = await requireDriverSession()
   try {
-    const result = await server.driverUpdateJob(orderId, updates)
+    const result = await server.driverUpdateJob(session.tenantId, orderId, updates)
     await writeAudit(
       auditFromSession(session, {
         type: 'driver.job_update',
@@ -308,10 +329,11 @@ export async function driverUpdateJobAction(
 export async function driverOnSiteAction(orderId: string, customerPhone?: string | null) {
   const session = await requireDriverSession()
   try {
-    const result = await server.driverUpdateJob(orderId, { status: 'On Site' })
+    const result = await server.driverUpdateJob(session.tenantId, orderId, { status: 'On Site' })
     if (customerPhone) {
       const { sendSms } = await import('@/lib/sms')
-      await sendSms(customerPhone, 'Enviroworx: your driver has arrived on site.')
+      const companyName = await server.getCompanyName(session.tenantId)
+      await sendSms(customerPhone, `${companyName}: your driver has arrived on site.`)
     }
     await writeAudit(
       auditFromSession(session, {
@@ -327,10 +349,9 @@ export async function driverOnSiteAction(orderId: string, customerPhone?: string
   }
 }
 
-
 export async function sendOverstaySmsAction(skipId: string) {
   return withOfficeAction(
     { type: 'skip.overstay_sms', message: `Overstay SMS sent for skip ${skipId}`, entityType: 'inventory', entityId: skipId },
-    () => server.sendOverstaySms(skipId)
+    (session) => server.sendOverstaySms(session.tenantId, skipId)
   )
 }

@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase-browser'
 import toast from 'react-hot-toast'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
-import { getLorries, getDriversList } from '@/lib/api'
+import {
+  getLorriesAction as getLorries,
+  getDriversListAction as getDriversList,
+} from '@/app/actions/office-data'
 import { updateDriverPinAction } from '@/app/actions/operations'
 import { logFleetIssueAction, resolveFleetIssueAction,
   listCarrierLicencesAction, upsertCarrierLicenceAction, deleteCarrierLicenceAction } from '@/app/actions/office-data'

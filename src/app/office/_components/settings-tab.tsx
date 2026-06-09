@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase-browser'
 import toast from 'react-hot-toast'
 import { Trash2 } from 'lucide-react'
 import { SKIP_SIZES } from '@/lib/config'
-import { getCustomPricingList } from '@/lib/api'
+import { getCustomPricingListAction as getCustomPricingList } from '@/app/actions/office-data'
 import { updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
 import { listOfficeStaffAction, getSetupStatusAction } from '@/app/actions/office-data'
 

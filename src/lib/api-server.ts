@@ -1,100 +1,36 @@
 /**
- * ENVIROWORX API LAYER
+ * SERVER API LAYER (service role)
  *
- * Replaces ALL google.script.run calls with direct Supabase queries.
- * Each function maps 1:1 to a Google Apps Script function from Code.gs.
- *
- * KEY PERFORMANCE DIFFERENCE:
- * - Google Sheets: batchGet reads ALL data, sends to client, client processes
- * - Supabase: SQL queries run server-side, return ONLY what's needed
- *   → 10-50x faster for dashboard loads
+ * Every function takes a required `tenantId` — always derived from the
+ * caller's session (see operations.ts / office-data.ts), never from
+ * client input. Because these run with the service role (RLS bypassed),
+ * the tenant filter on every query is the isolation boundary.
  */
 import 'server-only'
 import { supabaseAdmin as supabase } from './supabase'
 import { sendSms } from './sms'
-import { DEFAULT_CONFIG, type AppConfig } from './config'
+import { DEFAULT_CONFIG } from './config'
 import { logToDrive } from '@/app/actions/drive'
 
-async function getCompanyName(): Promise<string> {
-  const { data } = await supabase.from('config').select('value').eq('key', 'company_name').maybeSingle()
+export async function getCompanyName(tenantId: string): Promise<string> {
+  const { data } = await supabase
+    .from('config')
+    .select('value')
+    .eq('tenant_id', tenantId)
+    .eq('key', 'company_name')
+    .maybeSingle()
   return (data?.value as string) || DEFAULT_CONFIG.companyName || 'Enviroworx'
 }
 
 // ============================================================
-// DASHBOARD DATA (replaces getBusinessData & getRawDashboardData)
+// DISPATCH
 // ============================================================
 
-export async function getDashboardStats() {
-  const today = new Date().toISOString().split('T')[0]
-  const weekStart = getWeekStart()
-  const twoDaysAway = new Date(); 
-  twoDaysAway.setDate(twoDaysAway.getDate() + 2);
-  const expiryCutoff = twoDaysAway.toISOString().split('T')[0];
-
-  // Run all queries in parallel
-  const [
-    { count: completedToday },
-    { count: completedWeek },
-    { count: futureBookings },
-    { count: tipsToday },
-    { data: inventorySummary },
-    { data: activeTippers },
-    { data: unpaidInvoices },
-    { data: driverHours },
-    { data: collections },
-    { data: expiringPermits },
-    { data: revenueData },
-  ] = await Promise.all([
-    supabase.from('orders').select('id', { count: 'exact', head: true })
-      .eq('status', 'Completed').eq('date', today),
-    supabase.from('orders').select('id', { count: 'exact', head: true })
-      .eq('status', 'Completed').gte('date', weekStart),
-    supabase.from('orders').select('id', { count: 'exact', head: true })
-      .in('status', ['Booked', 'Assigned']).gt('date', today),
-    supabase.from('cash_log').select('id', { count: 'exact', head: true })
-      .gte('logged_at', today + 'T00:00:00'),
-    supabase.from('v_inventory_summary').select('*'),
-    supabase.from('active_tippers').select('*').order('timestamp', { ascending: false }),
-    supabase.from('v_unpaid_invoices').select('*').limit(100),
-    supabase.from('v_driver_hours_today').select('*'),
-    supabase.from('v_collections_due').select('*'),
-    supabase.from('permits').select('*').lte('expiry_date', expiryCutoff).neq('status', 'Expired'),
-    supabase.from('cash_log').select('cost_gross, net_weight, waste_type').gte('logged_at', today + 'T00:00:00')
-  ])
-
-  // Calculate estimated profit with dynamic disposal rates
-  const totalRev = revenueData?.reduce((sum, r) => sum + (r.cost_gross || 0), 0) ?? 0
-  const estDisposalCost = revenueData?.reduce((sum, r) => {
-    const rate = DEFAULT_CONFIG.disposalCosts[r.waste_type || 'Mix Con'] || 130 
-    const tonnage = (r.net_weight || 0) / 1000
-    return sum + (tonnage * rate)
-  }, 0) ?? 0
-
-  return {
-    stats: {
-      completedToday: completedToday ?? 0,
-      completedWeek: completedWeek ?? 0,
-      futureBookings: futureBookings ?? 0,
-      tipsToday: tipsToday ?? 0,
-      estProfitToday: totalRev - estDisposalCost
-    },
-    inventorySummary: inventorySummary ?? [],
-    activeTippers: activeTippers ?? [],
-    unpaidInvoices: unpaidInvoices ?? [],
-    driverHours: driverHours ?? [],
-    collections: collections ?? [],
-    expiringPermits: expiringPermits ?? []
-  }
-}
-
-// ============================================================
-// DISPATCH (replaces dispatchJobs filtering)
-// ============================================================
-
-export async function getDispatchJobs(targetDate: string) {
+export async function getDispatchJobs(tenantId: string, targetDate: string) {
   const { data, error } = await supabase
     .from('orders')
     .select('*, customer:customers(name, phone, billing_address)')
+    .eq('tenant_id', tenantId)
     .eq('date', targetDate)
     .not('status', 'in', '("Completed","Cancelled")')
     .order('driver_name', { ascending: true, nullsFirst: true })
@@ -103,42 +39,61 @@ export async function getDispatchJobs(targetDate: string) {
   return data ?? []
 }
 
-export async function assignDriverToJob(orderId: string, driverName: string, driverId: string | null) {
+export async function assignDriverToJob(
+  tenantId: string,
+  orderId: string,
+  driverName: string,
+  driverId: string | null
+) {
   const { error } = await supabase
     .from('orders')
     .update({
       driver_name: driverName || null,
       driver_id: driverId,
-      status: driverName ? 'Assigned' : 'Booked'
+      status: driverName ? 'Assigned' : 'Booked',
     })
+    .eq('tenant_id', tenantId)
     .eq('id', orderId)
 
   if (error) throw error
 
-  // Send SMS notification (via Edge Function)
   if (driverName) {
-    const { data: order } = await supabase.from('orders').select('phone').eq('id', orderId).single()
+    const { data: order } = await supabase
+      .from('orders')
+      .select('phone')
+      .eq('tenant_id', tenantId)
+      .eq('id', orderId)
+      .maybeSingle()
     if (order?.phone) {
+      const companyName = await getCompanyName(tenantId)
       await sendSms(
         order.phone,
-        `Enviroworx: Your skip is on the route plan today. Driver: ${driverName}`
+        `${companyName}: Your skip is on the route plan today. Driver: ${driverName}`
       )
     }
   }
   return { success: true }
 }
 
-export async function autoAssignJobs(targetDate: string) {
+export async function autoAssignJobs(tenantId: string, targetDate: string) {
   const { data: unassigned } = await supabase
     .from('orders')
     .select('*')
+    .eq('tenant_id', tenantId)
     .eq('date', targetDate)
     .is('driver_name', null)
     .in('status', ['Booked', 'Aborted'])
     .order('address')
 
-  const { data: drivers } = await supabase.from('drivers').select('*').eq('status', 'Available')
-  const { data: combos } = await supabase.from('skip_combos').select('combination')
+  const { data: drivers } = await supabase
+    .from('drivers')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('status', 'Available')
+  const { data: combos } = await supabase
+    .from('skip_combos')
+    .select('combination')
+    .eq('tenant_id', tenantId)
 
   if (!unassigned?.length || !drivers?.length) return { success: false, message: 'No jobs or drivers' }
 
@@ -169,17 +124,17 @@ export async function autoAssignJobs(targetDate: string) {
     supabase.from('orders').update({
       driver_name: driverName,
       driver_id: driverId,
-      status: 'Assigned' as any
-    }).eq('id', job.id)
+      status: 'Assigned' as any,
+    }).eq('tenant_id', tenantId).eq('id', job.id)
   ))
 
-  // SMS notifications for customers with phone numbers
+  const companyName = await getCompanyName(tenantId)
   const smsPromises = assignments
     .filter(({ job }) => job.phone)
     .map(({ job, driverName }) =>
       sendSms(
         job.phone,
-        `Enviroworx: Your ${job.job_type?.toLowerCase() || 'job'} is scheduled for ${targetDate}. Driver: ${driverName}. Reply STOP to opt out.`
+        `${companyName}: Your ${job.job_type?.toLowerCase() || 'job'} is scheduled for ${targetDate}. Driver: ${driverName}. Reply STOP to opt out.`
       ).catch(() => {})
     )
   await Promise.all(smsPromises)
@@ -188,10 +143,11 @@ export async function autoAssignJobs(targetDate: string) {
 }
 
 // ============================================================
-// BOOKINGS (replaces processBooking)
+// BOOKINGS
 // ============================================================
 
 export async function processBooking(form: {
+  tenantId: string
   customerName: string
   phone: string
   address: string
@@ -203,44 +159,42 @@ export async function processBooking(form: {
   calculatedPrice?: string
   permitCheck?: boolean
   permitWeeks?: number
-  tenantId?: string
 }) {
   const tenantId = form.tenantId
 
   // Auto-create customer if not exists (scoped to tenant)
-  const customerQuery = supabase
+  let { data: customer } = await supabase
     .from('customers')
     .select('id')
+    .eq('tenant_id', tenantId)
     .ilike('name', form.customerName.trim())
-  if (tenantId) customerQuery.eq('tenant_id', tenantId)
-
-  let { data: customer } = await customerQuery.single()
+    .limit(1)
+    .maybeSingle()
 
   if (!customer) {
-    const newCustomerPayload: Record<string, unknown> = {
-      name: form.customerName.trim(),
-      phone: form.phone,
-      shipping_address: form.address,
-    }
-    if (tenantId) newCustomerPayload.tenant_id = tenantId
-
     const { data: newCust } = await supabase
       .from('customers')
-      .insert(newCustomerPayload as any)
+      .insert({
+        tenant_id: tenantId,
+        name: form.customerName.trim(),
+        phone: form.phone,
+        shipping_address: form.address,
+      } as any)
       .select('id')
       .single()
     customer = newCust
   }
 
   // Check custom pricing for this customer/skip size
-  const customSkipPrice = await getCustomerPrice(form.customerName.trim(), form.skipSize)
+  const customSkipPrice = await getCustomerPrice(tenantId, form.customerName.trim(), form.skipSize)
   const effectivePrice = form.calculatedPrice || (customSkipPrice !== null ? String(customSkipPrice) : null)
 
   let notes = form.deliveryComments || ''
   if (effectivePrice) notes += ` [Net: £${effectivePrice}${customSkipPrice !== null ? ' (Custom)' : ''}]`
   if (form.permitCheck) notes += ` [Permit: ${form.permitWeeks || 1} Wk]`
 
-  const orderPayload: Record<string, unknown> = {
+  const { error } = await supabase.from('orders').insert({
+    tenant_id: tenantId,
     date: form.deliveryDate,
     status: 'Booked' as any,
     skip_size: form.skipSize,
@@ -251,10 +205,7 @@ export async function processBooking(form: {
     phone: form.phone,
     payment_method: form.paymentMethod as any,
     delivery_comments: notes.trim(),
-  }
-  if (tenantId) orderPayload.tenant_id = tenantId
-
-  const { error } = await supabase.from('orders').insert(orderPayload as any)
+  } as any)
 
   if (error) throw error
   return { success: true, message: '✅ Job Booked!' }
@@ -262,11 +213,11 @@ export async function processBooking(form: {
 
 // ============================================================
 // SKIP MAP — place / move / collect a skip pin on the office map
-// (inventory rows carry latitude/longitude; see migration 20260529000000)
 // ============================================================
 
-/** Drop or update a skip pin at given coordinates. Upserts by skip_id. */
+/** Drop or update a skip pin at given coordinates. Upserts by (tenant, skip_id). */
 export async function placeSkipOnMap(form: {
+  tenantId: string
   skipId?: string
   skipSize: string
   customerName: string
@@ -276,7 +227,6 @@ export async function placeSkipOnMap(form: {
   longitude: number
   deliveryDate?: string
   comments?: string
-  tenantId?: string
 }) {
   if (!form.skipSize) return { success: false, message: '❌ Select a skip size' }
   if (typeof form.latitude !== 'number' || typeof form.longitude !== 'number') {
@@ -288,24 +238,22 @@ export async function placeSkipOnMap(form: {
     form.skipId?.trim() ||
     `MAP-${form.skipSize}-${Date.now().toString(36).toUpperCase()}`
 
-  const upsertPayload: Record<string, unknown> = {
-    skip_id: skipId,
-    skip_size: form.skipSize,
-    customer_name: form.customerName?.trim() || null,
-    customer_phone: form.customerPhone?.trim() || null,
-    delivery_address: form.address?.trim() || null,
-    delivery_date: form.deliveryDate || new Date().toISOString(),
-    latitude: form.latitude,
-    longitude: form.longitude,
-    comments: form.comments?.trim() || null,
-    status: 'In Use' as any,
-    updated_at: new Date().toISOString(),
-  }
-  if (form.tenantId) upsertPayload.tenant_id = form.tenantId
-
   const { error } = await supabase.from('inventory').upsert(
-    upsertPayload as any,
-    { onConflict: 'skip_id' }
+    {
+      tenant_id: form.tenantId,
+      skip_id: skipId,
+      skip_size: form.skipSize,
+      customer_name: form.customerName?.trim() || null,
+      customer_phone: form.customerPhone?.trim() || null,
+      delivery_address: form.address?.trim() || null,
+      delivery_date: form.deliveryDate || new Date().toISOString(),
+      latitude: form.latitude,
+      longitude: form.longitude,
+      comments: form.comments?.trim() || null,
+      status: 'In Use' as any,
+      updated_at: new Date().toISOString(),
+    } as any,
+    { onConflict: 'tenant_id,skip_id' }
   )
 
   if (error) throw error
@@ -313,17 +261,18 @@ export async function placeSkipOnMap(form: {
 }
 
 /** Reposition an existing skip pin (used when a marker is dragged). */
-export async function moveSkipLocation(id: string, latitude: number, longitude: number) {
+export async function moveSkipLocation(tenantId: string, id: string, latitude: number, longitude: number) {
   const { error } = await supabase
     .from('inventory')
     .update({ latitude, longitude, updated_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId)
     .eq('id', id)
   if (error) throw error
   return { success: true }
 }
 
 /** Mark a skip collected — clears it off the map and frees it. */
-export async function collectSkipFromMap(id: string) {
+export async function collectSkipFromMap(tenantId: string, id: string) {
   const { error } = await supabase
     .from('inventory')
     .update({
@@ -335,16 +284,18 @@ export async function collectSkipFromMap(id: string) {
       delivery_address: null,
       updated_at: new Date().toISOString(),
     })
+    .eq('tenant_id', tenantId)
     .eq('id', id)
   if (error) throw error
   return { success: true, message: '✅ Skip collected' }
 }
 
 // ============================================================
-// WEIGHBRIDGE (replaces processWeightLog + logActiveTipper)
+// WEIGHBRIDGE
 // ============================================================
 
 export async function logActiveTipper(form: {
+  tenantId: string
   lorryReg: string
   customerName: string
   wasteType: string
@@ -352,12 +303,12 @@ export async function logActiveTipper(form: {
   address: string
   skipSize: string
   skipId?: string
-  tenantId?: string
 }) {
   if (!form.skipSize) return { success: false, message: '❌ ERROR: Select Size!' }
   if (!form.lorryReg) return { success: false, message: '❌ ERROR: Enter Reg!' }
 
-  const payload: Record<string, unknown> = {
+  const { error } = await supabase.from('active_tippers').insert({
+    tenant_id: form.tenantId,
     reg: form.lorryReg,
     customer_name: form.customerName,
     waste_type: form.wasteType,
@@ -365,16 +316,14 @@ export async function logActiveTipper(form: {
     address: form.address || 'Unknown',
     skip_size: form.skipSize,
     skip_id: form.skipId || null,
-  }
-  if (form.tenantId) payload.tenant_id = form.tenantId
-
-  const { error } = await supabase.from('active_tippers').insert(payload as any)
+  } as any)
 
   if (error) throw error
   return { success: true, message: `📥 Truck ${form.lorryReg} logged IN.` }
 }
 
 export async function processWeightLog(form: {
+  tenantId: string
   lorryReg: string
   customerName: string
   wasteType: string
@@ -392,10 +341,10 @@ export async function processWeightLog(form: {
   tipperRowIndex?: string
   ewcCodeId?: string
   ewcCode?: string
-  tenantId?: string
 }) {
   if (form.wasteType === 'TBC') return { success: false, message: '❌ ERROR: Waste Type Required!' }
 
+  const tenantId = form.tenantId
   const gross = form.grossWeight || 0
   const tare = form.tareWeight || 0
   const net = Math.abs(gross - tare)
@@ -404,7 +353,7 @@ export async function processWeightLog(form: {
   // Calculate cost — check custom pricing first
   let costNet = form.costNet ?? 0
   if (!form.costNet) {
-    const customPrice = await getCustomerPrice(form.customerName, undefined, form.wasteType)
+    const customPrice = await getCustomerPrice(tenantId, form.customerName, undefined, form.wasteType)
     if (customPrice !== null) {
       costNet = (net / 1000) * customPrice
     } else {
@@ -420,28 +369,31 @@ export async function processWeightLog(form: {
   const costGross = costNet * (1 + config.vatRate)
 
   // Insert weight log
-  const wlPayload: Record<string, unknown> = {
-    customer_name: form.customerName,
-    lorry_reg: form.lorryReg,
-    skip_size: form.skipSize,
-    skip_id: form.skipId || null,
-    address: form.address,
-    waste_type: form.wasteType as any,
-    gross_weight: gross,
-    tare_weight: tare,
-    direction: form.direction as any,
-    notes: form.wbNotes || null,
-    ewc_code_id: form.ewcCodeId || null,
-    ewc_code: form.ewcCode || null,
-  }
-  if (form.tenantId) wlPayload.tenant_id = form.tenantId
-
-  const { data: weightLog, error: wlError } = await supabase.from('weight_logs').insert(wlPayload as any).select('ticket_number, id').single()
+  const { data: weightLog, error: wlError } = await supabase
+    .from('weight_logs')
+    .insert({
+      tenant_id: tenantId,
+      customer_name: form.customerName,
+      lorry_reg: form.lorryReg,
+      skip_size: form.skipSize,
+      skip_id: form.skipId || null,
+      address: form.address,
+      waste_type: form.wasteType as any,
+      gross_weight: gross,
+      tare_weight: tare,
+      direction: form.direction as any,
+      notes: form.wbNotes || null,
+      ewc_code_id: form.ewcCodeId || null,
+      ewc_code: form.ewcCode || null,
+    } as any)
+    .select('ticket_number, id')
+    .single()
 
   if (wlError) throw wlError
 
   // Insert cash log
-  const clPayload: Record<string, unknown> = {
+  await supabase.from('cash_log').insert({
+    tenant_id: tenantId,
     ticket_number: weightLog.ticket_number,
     customer_name: form.customerName,
     skip_size: form.skipSize,
@@ -455,10 +407,7 @@ export async function processWeightLog(form: {
     payment_method: (form.paymentMethod || 'Invoice') as any,
     tyl_ref: form.tylRef || null,
     comments: form.wbNotes || null,
-  }
-  if (form.tenantId) clPayload.tenant_id = form.tenantId
-
-  await supabase.from('cash_log').insert(clPayload as any)
+  } as any)
 
   if (form.paymentMethod === 'Cash') {
     await logToDrive({
@@ -474,14 +423,19 @@ export async function processWeightLog(form: {
 
   // Insert weighbridge reading
   await supabase.from('weighbridge_readings').insert({
+    tenant_id: tenantId,
     weight_kg: gross,
     description: `${form.customerName} - ${form.wasteType} (Ticket ${weightLog.ticket_number})`,
     reg_number: form.lorryReg,
-  })
+  } as any)
 
   // Delete tipper from holding pen if applicable
   if (form.tipperRowIndex) {
-    await supabase.from('active_tippers').delete().eq('id', form.tipperRowIndex)
+    await supabase
+      .from('active_tippers')
+      .delete()
+      .eq('tenant_id', tenantId)
+      .eq('id', form.tipperRowIndex)
   }
 
   // Update inventory if skip returned
@@ -490,8 +444,10 @@ export async function processWeightLog(form: {
     const { data: skip } = await supabase
       .from('inventory')
       .select('id')
+      .eq('tenant_id', tenantId)
       .ilike('skip_id', form.skipId.trim())
-      .single()
+      .limit(1)
+      .maybeSingle()
 
     if (skip) {
       await supabase.from('inventory').update({
@@ -499,7 +455,7 @@ export async function processWeightLog(form: {
         delivery_address: null,
         delivery_date: null,
         customer_name: null,
-      }).eq('id', skip.id)
+      }).eq('tenant_id', tenantId).eq('id', skip.id)
       inventoryMessage = `\n✅ Skip ${form.skipId} Available in Yard.`
     } else {
       inventoryMessage = `\n⚠️ Skip ID '${form.skipId}' not in Inventory!`
@@ -513,22 +469,38 @@ export async function processWeightLog(form: {
   }
 }
 
+export async function getStoredTare(tenantId: string, reg: string, skipSize: string) {
+  const { data } = await supabase
+    .from('tare_weights')
+    .select('tare_weight')
+    .eq('tenant_id', tenantId)
+    .ilike('lorry_registration', reg.replace(/\s+/g, ''))
+    .ilike('skip_size', skipSize)
+    .limit(1)
+    .maybeSingle()
+  return data?.tare_weight ?? null
+}
+
 // ============================================================
-// DRIVER APP (replaces getDriverSpecificJobs, completeJob, etc.)
+// DRIVER APP
 // ============================================================
 
-export async function getDriverJobs(driverName: string) {
+export async function getDriverJobs(tenantId: string, driverName: string) {
   const today = new Date().toISOString().split('T')[0]
 
   const { data: jobs } = await supabase
     .from('orders')
     .select('*')
+    .eq('tenant_id', tenantId)
     .eq('driver_name', driverName)
     .lte('date', today)
     .in('status', ['Booked', 'Assigned', 'Out for Delivery'])
     .order('address')
 
-  const { data: fuelCards } = await supabase.from('fuel_cards').select('*')
+  const { data: fuelCards } = await supabase
+    .from('fuel_cards')
+    .select('*')
+    .eq('tenant_id', tenantId)
 
   // For collections, look up the skip currently at the customer
   const enrichedJobs = await Promise.all((jobs ?? []).map(async (job) => {
@@ -537,10 +509,11 @@ export async function getDriverJobs(driverName: string) {
       const { data: skip } = await supabase
         .from('inventory')
         .select('skip_id')
+        .eq('tenant_id', tenantId)
         .ilike('customer_name', job.customer_name ?? '')
         .in('status', ['Delivered', 'In Use'])
         .limit(1)
-        .single()
+        .maybeSingle()
       hint = skip?.skip_id || ''
     }
     return { ...job, hint }
@@ -553,7 +526,7 @@ export async function getDriverJobs(driverName: string) {
   }
 }
 
-export async function completeJob(form: {
+export async function completeJob(tenantId: string, form: {
   orderId: string
   skipId: string
   jobType: string
@@ -572,14 +545,16 @@ export async function completeJob(form: {
     photo_proof: form.photoUrl || null,
     voice_note_url: form.voiceNoteUrl || null,
     arrive_time: new Date().toISOString(),
-  }).eq('id', form.orderId)
+  }).eq('tenant_id', tenantId).eq('id', form.orderId)
 
   // Update inventory
   const { data: skip } = await supabase
     .from('inventory')
     .select('id, skip_size')
+    .eq('tenant_id', tenantId)
     .ilike('skip_id', sid)
-    .single()
+    .limit(1)
+    .maybeSingle()
 
   if (skip) {
     if (form.jobType === 'Delivery' || form.jobType === 'Exchange') {
@@ -588,69 +563,73 @@ export async function completeJob(form: {
         delivery_address: form.address,
         delivery_date: new Date().toISOString(),
         customer_name: form.customerName,
-      }).eq('id', skip.id)
+      }).eq('tenant_id', tenantId).eq('id', skip.id)
     } else if (['Collection', 'Wait & Load', 'Cage Load'].includes(form.jobType)) {
       await supabase.from('inventory').update({
         status: 'Available' as any,
         delivery_address: null,
         delivery_date: null,
         customer_name: null,
-      }).eq('id', skip.id)
+      }).eq('tenant_id', tenantId).eq('id', skip.id)
     }
   }
 
   return { success: true, message: 'Job Synced.' }
 }
 
-export async function driverAbortJob(orderId: string, reason: string) {
+export async function driverAbortJob(tenantId: string, orderId: string, reason: string) {
   await supabase.from('orders').update({
     status: 'Aborted' as any,
     delivery_comments: reason,
-  }).eq('id', orderId)
+  }).eq('tenant_id', tenantId).eq('id', orderId)
   return { success: true }
 }
 
 // ============================================================
-// SHIFTS & TIME TRACKING (replaces verifyPINAndClock)
+// SHIFTS & TIME TRACKING
 // ============================================================
 
-export async function clockInOut(driverName: string, pin: string, action: 'IN' | 'OUT', lorryReg?: string, tenantId?: string) {
+export async function clockInOut(
+  tenantId: string,
+  driverName: string,
+  pin: string,
+  action: 'IN' | 'OUT',
+  lorryReg?: string
+) {
   // Verify PIN (scoped to tenant)
-  const driverQuery = supabase
+  const { data: driver } = await supabase
     .from('drivers')
     .select('*')
+    .eq('tenant_id', tenantId)
     .eq('name', driverName)
     .eq('pin_code', pin)
-  if (tenantId) driverQuery.eq('tenant_id', tenantId)
-
-  const { data: driver } = await driverQuery.single()
+    .limit(1)
+    .maybeSingle()
 
   if (!driver) return { success: false, message: '❌ Invalid PIN for ' + driverName }
 
   if (action === 'IN') {
-    const shiftPayload: Record<string, unknown> = {
+    const { data: shift } = await supabase.from('shifts').insert({
+      tenant_id: tenantId,
       employee: driverName,
       shift_date: new Date().toISOString().split('T')[0],
       role_or_lorry: lorryReg || 'Driver',
       clock_in: new Date().toISOString(),
-    }
-    if (tenantId) shiftPayload.tenant_id = tenantId
-
-    const { data: shift } = await supabase.from('shifts').insert(shiftPayload as any).select('id').single()
+    } as any).select('id').single()
 
     return { success: true, shiftId: shift?.id, driverName, message: `👋 Welcome ${driverName}. Clocked IN.` }
   }
 
   // Clock OUT - find open shift
-  const today = new Date().toISOString().split('T')[0]
   const { data: openShift } = await supabase
     .from('shifts')
     .select('*')
+    .eq('tenant_id', tenantId)
     .eq('employee', driverName)
     .is('clock_out', null)
     .order('clock_in', { ascending: false })
     .limit(1)
-    .single()
+    .maybeSingle()
 
   if (openShift) {
     const clockIn = new Date(openShift.clock_in!)
@@ -664,256 +643,31 @@ export async function clockInOut(driverName: string, pin: string, action: 'IN' |
       total_mins: totalMins,
       break_mins: breakMins,
       payable_hours: parseFloat(payableHours.toFixed(2)),
-    }).eq('id', openShift.id)
+    }).eq('tenant_id', tenantId).eq('id', openShift.id)
   }
 
   return { success: true, message: `🚪 Goodbye ${driverName}. Clocked OUT.` }
 }
 
-// ============================================================
-// CUSTOMERS (replaces customer search + add + timeline)
-// ============================================================
-
-export async function searchCustomers(query: string) {
-  const { data } = await supabase
-    .from('customers')
-    .select('id, name, phone, billing_address, account_balance, updated_at')
-    .ilike('name', `%${query}%`)
-    .limit(10)
-  return data ?? []
-}
-
-export async function addNewCustomer(form: { name: string; phone: string; email?: string; address?: string }) {
-  const { error } = await supabase.from('customers').insert({
-    name: form.name,
-    phone: form.phone,
-    email: form.email,
-    billing_address: form.address,
-    shipping_address: form.address,
-  })
-  if (error) throw error
-  return { success: true, message: '✅ Added!' }
-}
-
-export async function getCustomerTimeline(customerName: string) {
-  const config = DEFAULT_CONFIG
-  const nameLower = customerName.toLowerCase()
-
-  const [{ data: orders }, { data: cashLogs }] = await Promise.all([
-    supabase.from('orders').select('*')
-      .ilike('customer_name', nameLower)
-      .eq('status', 'Completed')
-      .order('date', { ascending: false })
-      .limit(50),
-    supabase.from('cash_log').select('*')
-      .ilike('customer_name', nameLower)
-      .order('logged_at', { ascending: false })
-      .limit(50),
-  ])
-
-  let totalSpend = 0
-  let outstandingBalance = 0
-
-  const jobs = (orders ?? []).map(o => {
-    const skipSize = o.skip_size?.replace(/\D/g, '') ?? ''
-    const netPrice = config.pricesSkip[skipSize] || 0
-    const gross = netPrice * (1 + config.vatRate)
-    const paid = o.paid
-    totalSpend += gross
-    if (!paid && o.payment_method === 'Invoice') outstandingBalance += gross
-    return { date: o.date, type: o.job_type, size: o.skip_size, address: o.address, skipId: o.skip_id_used, amount: gross, paid }
-  })
-
-  const tips = (cashLogs ?? []).map(cl => {
-    const gross = cl.cost_gross || 0
-    const paid = (cl.amount_paid || 0) >= gross
-    totalSpend += gross
-    if (!paid && cl.payment_method === 'Invoice') outstandingBalance += gross
-    return { date: cl.logged_at, ticket: cl.ticket_number, wasteType: cl.waste_type, netWeight: cl.net_weight, amount: gross, paid }
-  })
-
-  return { customer: customerName, totalSpend, outstandingBalance, jobs, tips }
-}
-
-// ============================================================
-// REPORTS (replaces generateSheetReport)
-// ============================================================
-
-export async function generateReport(type: string, startDate: string, endDate: string) {
-  switch (type) {
-    case 'SEPA': {
-      const { data } = await supabase.from('weight_logs').select('*')
-        .gte('logged_at', startDate).lte('logged_at', endDate + 'T23:59:59')
-        .order('logged_at')
-      return data ?? []
-    }
-    case 'FINANCE': {
-      const { data } = await supabase.from('cash_log').select('*')
-        .gte('logged_at', startDate).lte('logged_at', endDate + 'T23:59:59')
-        .order('logged_at')
-      return data ?? []
-    }
-    case 'ASSETS': {
-      const { data } = await supabase.from('inventory').select('*')
-        .in('status', ['Delivered', 'In Use'])
-      return data ?? []
-    }
-    case 'DRIVER_MANIFEST': {
-      const { data } = await supabase.from('orders').select('*')
-        .gte('date', startDate).lte('date', endDate)
-        .eq('status', 'Completed')
-        .order('driver_name')
-      return data ?? []
-    }
-    default:
-      return []
-  }
-}
-
-// ============================================================
-// LIVE WEIGHBRIDGE (replaces getLiveScaleWeight)
-// ============================================================
-
-export async function getLiveScaleWeight() {
-  const { data } = await supabase
-    .from('weighbridge_readings')
-    .select('weight_kg, reg_number, timestamp')
-    .order('timestamp', { ascending: false })
-    .limit(1)
-    .single()
-  return data
-}
-
-export async function getStoredTare(reg: string, skipSize: string) {
-  const { data } = await supabase
-    .from('tare_weights')
-    .select('tare_weight')
-    .ilike('lorry_registration', reg.replace(/\s+/g, ''))
-    .ilike('skip_size', skipSize)
-    .single()
-  return data?.tare_weight ?? null
-}
-
-// ============================================================
-// MISC OPERATIONS
-// ============================================================
-
-export async function markJobPaid(id: string, source: 'Orders' | 'CashLog') {
-  if (source === 'Orders') {
-    await supabase.from('orders').update({ paid: true }).eq('id', id)
-  } else {
-    // Get cost_gross and set amount_paid = cost_gross
-    const { data } = await supabase.from('cash_log').select('cost_gross').eq('id', id).single()
-    if (data) {
-      await supabase.from('cash_log').update({ amount_paid: data.cost_gross }).eq('id', id)
-    }
-  }
-  return { success: true, message: 'Paid!' }
-}
-
-export async function updateBooking(orderId: string, newDate: string, newNotes: string) {
-  await supabase.from('orders').update({
-    date: newDate,
-    delivery_comments: newNotes,
-  }).eq('id', orderId)
-  return { success: true, message: 'Updated!' }
-}
-
-export async function cancelBooking(orderId: string) {
-  await supabase.from('orders').update({ status: 'Cancelled' as any }).eq('id', orderId)
-  return { success: true, message: 'Cancelled.' }
-}
-
-// ============================================================
-// FILE UPLOAD HELPER (Supabase Storage)
-// ============================================================
-
-export async function uploadFile(bucket: string, file: File, path: string) {
-  const { data, error } = await supabase.storage.from(bucket).upload(path, file, {
-    cacheControl: '3600',
-    upsert: false,
-  })
-  if (error) throw error
-
-  const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(data.path)
-  return urlData.publicUrl
-}
-
-// ============================================================
-// DRIVER: FLEET ISSUE LOGGING (replaces driverLogFleetIssue)
-// ============================================================
-
-export async function driverLogFleetIssue(form: {
-  driverName: string
-  lorryReg: string
-  issueType: string
-  description: string
-  photoUrl?: string
-}) {
-  const { error } = await supabase.from('fleet_logs').insert({
-    lorry_reg: form.lorryReg,
-    issue_type: form.issueType,
-    description: form.description,
-    reported_by: form.driverName,
-    photo_url: form.photoUrl || null,
-    status: 'Open' as any,
-  })
-
-  if (error) throw error
-  return { success: true, message: `🔧 Issue reported for ${form.lorryReg}` }
-}
-
-// ============================================================
-// DRIVER: YARD TIP (replaces driverLogYardTip)
-// ============================================================
-
-export async function driverLogYardTip(form: {
-  driverName: string
-  lorryReg: string
-  wasteType: string
-  customerName: string
-  skipId?: string
-  skipSize?: string
-}) {
-  // Log the active tipper (skip entering yard for weighbridge)
-  const { error } = await supabase.from('active_tippers').insert({
-    reg: form.lorryReg,
-    customer_name: form.customerName || form.driverName,
-    waste_type: form.wasteType,
-    gross_weight: 0,
-    address: 'YARD TIP',
-    skip_size: form.skipSize || 'Unknown',
-    skip_id: form.skipId || null,
-  })
-
-  if (error) throw error
-  return { success: true, message: `📥 Yard tip logged for ${form.lorryReg}. Proceed to weighbridge.` }
-}
-
-// ============================================================
-// DRIVER: BREAK TOGGLE (replaces driverToggleBreak)
-// ============================================================
-
-export async function driverToggleBreak(driverName: string, action: 'START' | 'END') {
-  const today = new Date().toISOString().split('T')[0]
+export async function driverToggleBreak(tenantId: string, driverName: string, action: 'START' | 'END') {
   const now = new Date().toISOString()
 
   const { data: openShift } = await supabase
     .from('shifts')
     .select('*')
+    .eq('tenant_id', tenantId)
     .eq('employee', driverName)
     .is('clock_out', null)
     .order('clock_in', { ascending: false })
     .limit(1)
-    .single()
+    .maybeSingle()
 
   if (!openShift) return { success: false, message: '❌ No active shift found.' }
 
   if (action === 'START') {
-    // Store break start in a metadata field; use the break_start column or notes
     await supabase.from('shifts').update({
       notes: `break_start:${now}`,
-    }).eq('id', openShift.id)
+    }).eq('tenant_id', tenantId).eq('id', openShift.id)
     return { success: true, message: '☕ Break started.', onBreak: true }
   }
 
@@ -926,7 +680,7 @@ export async function driverToggleBreak(driverName: string, action: 'START' | 'E
     await supabase.from('shifts').update({
       break_mins: totalBreak,
       notes: null,
-    }).eq('id', openShift.id)
+    }).eq('tenant_id', tenantId).eq('id', openShift.id)
 
     return { success: true, message: `☕ Break ended (${breakDuration} min).`, onBreak: false }
   }
@@ -935,10 +689,98 @@ export async function driverToggleBreak(driverName: string, action: 'START' | 'E
 }
 
 // ============================================================
-// DRIVER: UPDATE JOB (replaces driverUpdateJob)
+// MISC OPERATIONS
 // ============================================================
 
-export async function driverUpdateJob(orderId: string, updates: {
+export async function markJobPaid(tenantId: string, id: string, source: 'Orders' | 'CashLog') {
+  if (source === 'Orders') {
+    await supabase.from('orders').update({ paid: true }).eq('tenant_id', tenantId).eq('id', id)
+  } else {
+    // Get cost_gross and set amount_paid = cost_gross
+    const { data } = await supabase
+      .from('cash_log')
+      .select('cost_gross')
+      .eq('tenant_id', tenantId)
+      .eq('id', id)
+      .maybeSingle()
+    if (data) {
+      await supabase
+        .from('cash_log')
+        .update({ amount_paid: data.cost_gross })
+        .eq('tenant_id', tenantId)
+        .eq('id', id)
+    }
+  }
+  return { success: true, message: 'Paid!' }
+}
+
+export async function cancelBooking(tenantId: string, orderId: string) {
+  await supabase
+    .from('orders')
+    .update({ status: 'Cancelled' as any })
+    .eq('tenant_id', tenantId)
+    .eq('id', orderId)
+  return { success: true, message: 'Cancelled.' }
+}
+
+// ============================================================
+// DRIVER: FLEET ISSUE LOGGING
+// ============================================================
+
+export async function driverLogFleetIssue(tenantId: string, form: {
+  driverName: string
+  lorryReg: string
+  issueType: string
+  description: string
+  photoUrl?: string
+}) {
+  const { error } = await supabase.from('fleet_logs').insert({
+    tenant_id: tenantId,
+    lorry_reg: form.lorryReg,
+    issue_type: form.issueType,
+    description: form.description,
+    reported_by: form.driverName,
+    photo_url: form.photoUrl || null,
+    status: 'Open' as any,
+  } as any)
+
+  if (error) throw error
+  return { success: true, message: `🔧 Issue reported for ${form.lorryReg}` }
+}
+
+// ============================================================
+// DRIVER: YARD TIP
+// ============================================================
+
+export async function driverLogYardTip(tenantId: string, form: {
+  driverName: string
+  lorryReg: string
+  wasteType: string
+  customerName: string
+  skipId?: string
+  skipSize?: string
+}) {
+  // Log the active tipper (skip entering yard for weighbridge)
+  const { error } = await supabase.from('active_tippers').insert({
+    tenant_id: tenantId,
+    reg: form.lorryReg,
+    customer_name: form.customerName || form.driverName,
+    waste_type: form.wasteType,
+    gross_weight: 0,
+    address: 'YARD TIP',
+    skip_size: form.skipSize || 'Unknown',
+    skip_id: form.skipId || null,
+  } as any)
+
+  if (error) throw error
+  return { success: true, message: `📥 Yard tip logged for ${form.lorryReg}. Proceed to weighbridge.` }
+}
+
+// ============================================================
+// DRIVER: UPDATE JOB
+// ============================================================
+
+export async function driverUpdateJob(tenantId: string, orderId: string, updates: {
   address?: string
   deliveryComments?: string
   phone?: string
@@ -952,51 +794,77 @@ export async function driverUpdateJob(orderId: string, updates: {
 
   if (Object.keys(payload).length === 0) return { success: false, message: 'Nothing to update' }
 
-  const { error } = await supabase.from('orders').update(payload).eq('id', orderId)
+  const { error } = await supabase
+    .from('orders')
+    .update(payload)
+    .eq('tenant_id', tenantId)
+    .eq('id', orderId)
   if (error) throw error
   return { success: true, message: '✅ Job updated.' }
 }
 
 // ============================================================
-// CUSTOM PRICING (makes custom_pricing table work in calculations)
+// CUSTOM PRICING
 // ============================================================
 
-export async function getCustomPricingList() {
-  const { data } = await supabase.from('custom_pricing').select('*').order('customer_name')
+export async function getCustomPricingList(tenantId: string) {
+  const { data } = await supabase
+    .from('custom_pricing')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('customer_name')
   return data ?? []
 }
 
-export async function addCustomPrice(payload: { customer_name: string; skip_size?: string; waste_type?: string; net_price: number }) {
-  const { error } = await supabase.from('custom_pricing').insert(payload)
+export async function addCustomPrice(
+  tenantId: string,
+  payload: { customer_name: string; skip_size?: string; waste_type?: string; net_price: number }
+) {
+  const { error } = await supabase
+    .from('custom_pricing')
+    .insert({ ...payload, tenant_id: tenantId } as any)
   if (error) throw error
   return { success: true }
 }
 
-export async function deleteCustomPrice(id: string) {
-  const { error } = await supabase.from('custom_pricing').delete().eq('id', id)
+export async function deleteCustomPrice(tenantId: string, id: string) {
+  const { error } = await supabase
+    .from('custom_pricing')
+    .delete()
+    .eq('tenant_id', tenantId)
+    .eq('id', id)
   if (error) throw error
   return { success: true }
 }
 
-export async function getCustomerPrice(customerName: string, skipSize?: string, wasteType?: string): Promise<number | null> {
+export async function getCustomerPrice(
+  tenantId: string,
+  customerName: string,
+  skipSize?: string,
+  wasteType?: string
+): Promise<number | null> {
   let query = supabase
     .from('custom_pricing')
     .select('net_price')
+    .eq('tenant_id', tenantId)
     .ilike('customer_name', customerName.trim())
 
   if (skipSize) query = query.eq('skip_size', skipSize)
   if (wasteType) query = query.eq('waste_type', wasteType)
 
-  const { data } = await query.limit(1).single()
+  const { data } = await query.limit(1).maybeSingle()
   return data?.net_price ?? null
 }
 
 // ============================================================
-// SKIP UTILIZATION ANALYTICS (replaces getSkipUtilizationData)
+// SKIP UTILIZATION ANALYTICS
 // ============================================================
 
-export async function getSkipUtilization() {
-  const { data: inventory } = await supabase.from('inventory').select('*')
+export async function getSkipUtilization(tenantId: string) {
+  const { data: inventory } = await supabase
+    .from('inventory')
+    .select('*')
+    .eq('tenant_id', tenantId)
   if (!inventory) return { sizes: [], totals: { total: 0, inUse: 0, available: 0, rate: 0 } }
 
   const sizeMap: Record<string, { total: number; inUse: number; available: number; damaged: number }> = {}
@@ -1031,10 +899,10 @@ export async function getSkipUtilization() {
 }
 
 // ============================================================
-// DATA ARCHIVAL (replaces runSmartArchive + runMassCleanup)
+// DATA ARCHIVAL
 // ============================================================
 
-export async function archiveOldOrders(olderThanDays: number = 365) {
+export async function archiveOldOrders(tenantId: string, olderThanDays: number = 365) {
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - olderThanDays)
   const cutoffStr = cutoff.toISOString().split('T')[0]
@@ -1043,6 +911,7 @@ export async function archiveOldOrders(olderThanDays: number = 365) {
   const { data: oldOrders } = await supabase
     .from('orders')
     .select('*')
+    .eq('tenant_id', tenantId)
     .eq('status', 'Completed')
     .lte('date', cutoffStr)
 
@@ -1050,78 +919,103 @@ export async function archiveOldOrders(olderThanDays: number = 365) {
 
   // Insert into archive table
   const archiveRows = oldOrders.map(o => ({
+    tenant_id: tenantId,
     original_id: o.id,
     data: o,
     archived_at: new Date().toISOString(),
   }))
 
-  const { error: insertErr } = await supabase.from('archive_orders').insert(archiveRows)
+  const { error: insertErr } = await supabase.from('archive_orders').insert(archiveRows as any)
   if (insertErr) throw insertErr
 
   // Delete from main orders table
   const ids = oldOrders.map(o => o.id)
-  const { error: deleteErr } = await supabase.from('orders').delete().in('id', ids)
+  const { error: deleteErr } = await supabase
+    .from('orders')
+    .delete()
+    .eq('tenant_id', tenantId)
+    .in('id', ids)
   if (deleteErr) throw deleteErr
 
   return { success: true, message: `Archived ${oldOrders.length} orders older than ${olderThanDays} days.`, count: oldOrders.length }
 }
 
 // ============================================================
-// LORRY MANAGEMENT
+// FLEET MANAGEMENT
 // ============================================================
 
-export async function getLorries() {
-  const { data } = await supabase.from('lorries').select('*').order('registration')
+export async function getLorries(tenantId: string) {
+  const { data } = await supabase
+    .from('lorries')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('registration')
   return data ?? []
 }
 
-export async function getDriversList() {
-  const { data } = await supabase.from('drivers').select('*').order('name')
+/** Driver list for office UI — deliberately excludes pin_code. */
+export async function getDriversList(tenantId: string) {
+  const { data } = await supabase
+    .from('drivers')
+    .select('id, name, phone, status, created_at, updated_at, tenant_id')
+    .eq('tenant_id', tenantId)
+    .order('name')
   return data ?? []
 }
 
-export async function updateDriverPin(id: string, pin: string) {
-  const { error } = await supabase.from('drivers').update({ pin_code: pin }).eq('id', id)
+export async function updateDriverPin(tenantId: string, id: string, pin: string) {
+  const { error } = await supabase
+    .from('drivers')
+    .update({ pin_code: pin })
+    .eq('tenant_id', tenantId)
+    .eq('id', id)
   if (error) throw error
   return { success: true }
 }
 
-export async function updateConfig(key: string, value: any) {
-  const { error } = await supabase.from('config').upsert({ key, value, updated_at: new Date().toISOString() })
+export async function updateConfig(tenantId: string, key: string, value: any) {
+  const { error } = await supabase
+    .from('config')
+    .upsert(
+      { tenant_id: tenantId, key, value, updated_at: new Date().toISOString() } as any,
+      { onConflict: 'key,tenant_id' }
+    )
   if (error) throw error
   return { success: true }
 }
 
-export async function updateLorry(id: string, updates: { status?: string; mileage?: number; mot_due?: string; tax_due?: string }) {
-  const { error } = await supabase.from('lorries').update(updates).eq('id', id)
+export async function updateLorry(
+  tenantId: string,
+  id: string,
+  updates: { status?: string; mileage?: number; mot_due?: string; tax_due?: string }
+) {
+  const { error } = await supabase
+    .from('lorries')
+    .update(updates)
+    .eq('tenant_id', tenantId)
+    .eq('id', id)
   if (error) throw error
   return { success: true }
 }
 
 // ============================================================
-// HELPERS
+// OVERSTAY SMS
 // ============================================================
 
-function getWeekStart() {
-  const d = new Date()
-  const day = d.getDay()
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-  const monday = new Date(d.setDate(diff))
-  return monday.toISOString().split('T')[0]
-}
-
-export async function sendOverstaySms(skipId: string) {
+export async function sendOverstaySms(tenantId: string, skipId: string) {
   const { data: skip, error } = await supabase
     .from('inventory')
     .select('skip_id, skip_size, customer_name, customer_phone, delivery_address, delivery_date, comments')
+    .eq('tenant_id', tenantId)
     .eq('skip_id', skipId)
-    .single()
+    .limit(1)
+    .maybeSingle()
   if (error || !skip) return { success: false, message: 'Skip not found' }
   if (!skip.customer_phone) return { success: false, message: 'No phone number for this customer' }
   const days = skip.delivery_date
     ? Math.round((Date.now() - new Date(skip.delivery_date).getTime()) / 86400000)
     : null
-  const companyName = await getCompanyName()
+  const companyName = await getCompanyName(tenantId)
   const daysText = days !== null ? ` for ${days} days` : ''
   const message =
     `Hi ${skip.customer_name ?? 'there'}, your ${skip.skip_size}yd skip at ${skip.delivery_address ?? 'your site'} has been in position${daysText}. ` +

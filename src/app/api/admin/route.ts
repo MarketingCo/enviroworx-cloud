@@ -1,27 +1,36 @@
 /**
- * Admin API Routes
+ * Admin API Routes — office session required.
  * POST /api/admin
  * body: { action: 'archive' | 'utilization' | 'demurrage' | 'health', ... }
  */
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { archiveOldOrders, getSkipUtilization } from '@/lib/api'
+import { resolveOfficeSession } from '@/lib/session'
+import { archiveOldOrders, getSkipUtilization } from '@/lib/api-server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { DEFAULT_CONFIG } from '@/lib/config'
 
+// Programmatic callers authenticated by x-api-key (see middleware) have no
+// session — they operate on the original tenant.
+const DEFAULT_TENANT_ID = '56ec5b3f-6d42-4672-a98c-d60d9c22f284'
+
 export async function POST(request: Request) {
+  // Middleware has already authenticated (office Google session or x-api-key).
+  const session = await resolveOfficeSession()
+  const tenantId = session?.tenantId ?? DEFAULT_TENANT_ID
+
   const body = await request.json()
 
   switch (body.action) {
 
     case 'archive': {
-      const result = await archiveOldOrders(body.olderThanDays || 365)
+      const result = await archiveOldOrders(tenantId, body.olderThanDays || 365)
       return NextResponse.json(result)
     }
 
     case 'utilization': {
-      const result = await getSkipUtilization()
+      const result = await getSkipUtilization(tenantId)
       return NextResponse.json(result)
     }
 
@@ -34,6 +43,7 @@ export async function POST(request: Request) {
       const { data: overdueSkips } = await supabaseAdmin
         .from('inventory')
         .select('*')
+        .eq('tenant_id', tenantId)
         .in('status', ['In Use', 'Delivered'])
         .lt('delivery_date', cutoffStr)
         .not('customer_name', 'is', null)
@@ -54,6 +64,7 @@ export async function POST(request: Request) {
         const { data: existing } = await supabaseAdmin
           .from('cash_log')
           .select('id')
+          .eq('tenant_id', tenantId)
           .ilike('customer_name', skip.customer_name ?? '')
           .ilike('comments', '%[DEMURRAGE]%')
           .gte('logged_at', recentCutoff.toISOString())
@@ -65,6 +76,7 @@ export async function POST(request: Request) {
         const chargeGross = chargeNet * (1 + DEFAULT_CONFIG.vatRate)
 
         await supabaseAdmin.from('cash_log').insert({
+          tenant_id: tenantId,
           customer_name: skip.customer_name ?? 'Unknown',
           skip_size: skip.skip_size ?? 'Unknown',
           address: skip.delivery_address ?? 'On Hire',
@@ -76,7 +88,7 @@ export async function POST(request: Request) {
           amount_paid: 0,
           payment_method: 'Invoice',
           comments: `[DEMURRAGE] Skip ${skip.skip_id} on hire ${daysOut} days (${daysOverdue} days over limit)`,
-        })
+        } as any)
         charged++
       }
 
@@ -91,9 +103,9 @@ export async function POST(request: Request) {
     case 'health': {
       // System health check — useful for monitoring
       const checks = await Promise.allSettled([
-        supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }),
-        supabaseAdmin.from('inventory').select('id', { count: 'exact', head: true }),
-        supabaseAdmin.from('drivers').select('id', { count: 'exact', head: true }),
+        supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+        supabaseAdmin.from('inventory').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+        supabaseAdmin.from('drivers').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
       ])
 
       return NextResponse.json({

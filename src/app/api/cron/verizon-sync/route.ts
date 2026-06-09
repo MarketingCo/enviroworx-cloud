@@ -63,6 +63,7 @@ export async function GET(request: Request) {
 
       if (!reg || !lat || !lng) continue;
 
+      // Verizon credentials are the original tenant's — only touch their fleet.
       const { error: updateError } = await supabaseAdmin.from('vehicles')
         .update({
           latitude: lat,
@@ -71,6 +72,7 @@ export async function GET(request: Request) {
           heading: heading,
           last_updated: new Date().toISOString()
         })
+        .eq('tenant_id', '56ec5b3f-6d42-4672-a98c-d60d9c22f284')
         .or(`registration.eq.${reg},reg.eq.${reg},verizon_vehicle_number.eq.${reg}`);
 
       if (!updateError) {

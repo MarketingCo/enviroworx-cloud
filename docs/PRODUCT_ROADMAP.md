@@ -105,16 +105,29 @@ period so you bill overstays instead of losing the asset's earning time. Tie a c
 
 ---
 
-## Future: selling the software (keep the door open cheaply, don't build it)
+## Selling the software — current state (updated 2026-06-09)
 
-Two habits now, zero extra work later:
-1. **No hardcoded "Enviroworx"** in logic — drive name/branding/colours from the existing
-   `config` table.
-2. **Keep RLS clean and per-row** (you already started RLS hardening). Tenant isolation
-   later becomes "add a `tenant_id`," not "re-architect."
+**Done — tenant isolation is now enforced end-to-end:**
+- `tenants` table; `tenant_id` on all operational tables; codified in
+  `supabase/migrations/20260609000000_multi_tenancy_codified.sql` +
+  `..._tenant_unique_keys.sql` (so a fresh DB can be provisioned from the repo).
+- Every server action / API route derives `tenantId` from the session and scopes
+  every query (`api-server.ts`, `office-data.ts`, `portal.ts`, documents/reports
+  routes, crons). The old client-side `lib/api.ts` layer is deleted.
+- Views (`v_unpaid_invoices`, `v_inventory_summary`, etc.) expose `tenant_id`.
+- Config, branding, customer emails, driver PINs, skip IDs are unique **per tenant**;
+  generated documents (WTN/DTN/invoice) and SMS use the tenant's company name.
 
-Do **not** build multi-tenancy, billing, or signup now. It's a different (harder)
-business; revisit only once Enviroworx is running smoothly on it.
+**Still needed before onboarding tenant #2:**
+1. **Pre-auth tenant context** — driver/portal/tablet login pages list drivers via
+   anon RLS reads with no tenant filter, and auth routes default to the Enviroworx
+   tenant unless `tenantSlug` is posted. Give each tenant a URL (e.g. `/t/<slug>/driver`
+   or a subdomain) and thread the slug into login + the anon `drivers_public` reads.
+2. **Tenant onboarding flow** — script or admin screen to create tenant + seed config
+   + office_staff (a `tenant_onboarding` table already exists).
+3. **Per-tenant integrations** — Twilio/Stripe/QuickBooks/Drive/Verizon keys are
+   global env vars (currently Enviroworx's accounts). Move to per-tenant config.
+4. **Billing & contracts** — out of scope until a real second customer exists.
 
 ---
 

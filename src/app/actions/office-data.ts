@@ -224,13 +224,11 @@ export async function getDashboardStatsAction() {
     supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('tenant_id', tid).eq('status', 'Completed').gte('date', weekStart),
     supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('tenant_id', tid).in('status', ['Booked', 'Assigned']).gt('date', today),
     supabaseAdmin.from('cash_log').select('id', { count: 'exact', head: true }).eq('tenant_id', tid).gte('logged_at', `${today}T00:00:00`),
-    // Views below don't have tenant_id yet — they return data for all tenants.
-    // With a single tenant this is safe; update these views before adding tenant #2.
-    supabaseAdmin.from('v_inventory_summary').select('*'),
+    supabaseAdmin.from('v_inventory_summary').select('*').eq('tenant_id', tid),
     supabaseAdmin.from('active_tippers').select('*').eq('tenant_id', tid).order('timestamp', { ascending: false }),
-    supabaseAdmin.from('v_unpaid_invoices').select('*').limit(100),
-    supabaseAdmin.from('v_driver_hours_today').select('*'),
-    supabaseAdmin.from('v_collections_due').select('*'),
+    supabaseAdmin.from('v_unpaid_invoices').select('*').eq('tenant_id', tid).limit(100),
+    supabaseAdmin.from('v_driver_hours_today').select('*').eq('tenant_id', tid),
+    supabaseAdmin.from('v_collections_due').select('*').eq('tenant_id', tid),
     supabaseAdmin.from('permits').select('*').eq('tenant_id', tid).lte('expiry_date', expiryCutoff).neq('status', 'Expired'),
     supabaseAdmin.from('cash_log').select('cost_gross, net_weight, waste_type').eq('tenant_id', tid).gte('logged_at', `${today}T00:00:00`),
   ])
@@ -338,6 +336,7 @@ export async function mergeCustomersAction(primaryId: string, duplicateIds: stri
     const { data: primary, error: pErr } = await supabaseAdmin
       .from('customers')
       .select('id, name')
+      .eq('tenant_id', session.tenantId)
       .eq('id', primaryId)
       .single()
     if (pErr || !primary) throw new Error('Primary customer not found')
@@ -345,20 +344,27 @@ export async function mergeCustomersAction(primaryId: string, duplicateIds: stri
     const { data: dupes } = await supabaseAdmin
       .from('customers')
       .select('id, name')
+      .eq('tenant_id', session.tenantId)
       .in('id', ids)
 
     for (const d of dupes ?? []) {
       await supabaseAdmin
         .from('orders')
         .update({ customer_name: primary.name })
+        .eq('tenant_id', session.tenantId)
         .ilike('customer_name', d.name)
       await supabaseAdmin
         .from('cash_log')
         .update({ customer_name: primary.name })
+        .eq('tenant_id', session.tenantId)
         .ilike('customer_name', d.name)
     }
 
-    const { error: delErr } = await supabaseAdmin.from('customers').delete().in('id', ids)
+    const { error: delErr } = await supabaseAdmin
+      .from('customers')
+      .delete()
+      .eq('tenant_id', session.tenantId)
+      .in('id', ids)
     if (delErr) throw delErr
 
     await writeAudit(
@@ -378,9 +384,9 @@ export async function mergeCustomersAction(primaryId: string, duplicateIds: stri
 }
 
 export async function runMonthlySepaDriveSyncAction(startDate: string, endDate: string) {
-  await assertOffice()
+  const session = await assertOffice()
   const { runMonthlySepaDriveSync } = await import('@/lib/monthly-sepa-drive-sync')
-  return runMonthlySepaDriveSync(startDate, endDate)
+  return runMonthlySepaDriveSync(startDate, endDate, session.tenantId)
 }
 
 export async function getOpsSummaryAction(startDate: string, endDate: string) {
@@ -413,8 +419,10 @@ export async function getOpsSummaryAction(startDate: string, endDate: string) {
       .in('status', ['Booked', 'Assigned', 'Out for Delivery', 'On Site'])
       .gte('date', startDate)
       .lte('date', endDate),
-    // v_unpaid_invoices is a view — no tenant_id; update view before adding tenant #2
-    supabaseAdmin.from('v_unpaid_invoices').select('id', { count: 'exact', head: true }),
+    supabaseAdmin
+      .from('v_unpaid_invoices')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', session.tenantId),
   ])
 
   const cashGross = cash?.reduce((s, r) => s + (r.cost_gross || 0), 0) ?? 0
@@ -526,17 +534,23 @@ export async function getEwcCodesAction() {
 }
 
 export async function generateWtnAction(weightLogId: string) {
-  await assertOffice()
+  const session = await assertOffice()
   const { data: wl, error: wlErr } = await supabaseAdmin
-    .from('weight_logs').select('*').eq('id', weightLogId).single()
+    .from('weight_logs')
+    .select('*')
+    .eq('tenant_id', session.tenantId)
+    .eq('id', weightLogId)
+    .single()
   if (wlErr || !wl) throw new Error('Weight log not found')
   const net = Math.abs((wl.gross_weight || 0) - (wl.tare_weight || 0))
   const transferDate = (wl.logged_at || new Date().toISOString()).split('T')[0]
   const { data: wtn, error: wtnErr } = await supabaseAdmin
     .from('waste_transfer_notes')
     .insert({
+      tenant_id: session.tenantId,
       weight_log_id: weightLogId,
       transfer_date: transferDate,
+      transferee_name: await (await import('@/lib/api-server')).getCompanyName(session.tenantId),
       transferor_name: wl.customer_name,
       transferor_address: wl.address || null,
       waste_description: wl.waste_type || 'Mixed waste',
@@ -552,26 +566,33 @@ export async function generateWtnAction(weightLogId: string) {
 export async function logFleetIssueAction(form: {
   lorry_reg: string; issue_type: string; description: string; reported_by?: string
 }) {
-  await assertOffice()
+  const session = await assertOffice()
   const { error } = await supabaseAdmin.from('fleet_logs').insert({
+    tenant_id: session.tenantId,
     lorry_reg: form.lorry_reg, issue_type: form.issue_type,
     description: form.description, reported_by: form.reported_by || 'Office', status: 'Open',
-  })
+  } as any)
   if (error) throw new Error(error.message)
   return { success: true }
 }
 
 export async function resolveFleetIssueAction(id: string) {
-  await assertOffice()
+  const session = await assertOffice()
   const { error } = await supabaseAdmin.from('fleet_logs')
-    .update({ status: 'Resolved', resolved_at: new Date().toISOString() } as any).eq('id', id)
+    .update({ status: 'Resolved', resolved_at: new Date().toISOString() } as any)
+    .eq('tenant_id', session.tenantId)
+    .eq('id', id)
   if (error) throw new Error(error.message)
   return { success: true }
 }
 
 export async function listCarrierLicencesAction() {
-  await assertOffice()
-  const { data, error } = await supabaseAdmin.from('carrier_licences').select('*').order('expiry_date')
+  const session = await assertOffice()
+  const { data, error } = await supabaseAdmin
+    .from('carrier_licences')
+    .select('*')
+    .eq('tenant_id', session.tenantId)
+    .order('expiry_date')
   if (error) throw new Error(error.message)
   return data ?? []
 }
@@ -580,15 +601,55 @@ export async function upsertCarrierLicenceAction(payload: {
   id?: string; holder_name: string; licence_number: string; licence_type: string
   regulator: string; issue_date?: string; expiry_date?: string; status: string; notes?: string
 }) {
-  await assertOffice()
-  const { error } = await supabaseAdmin.from('carrier_licences').upsert(payload as any)
+  const session = await assertOffice()
+  const { error } = await supabaseAdmin
+    .from('carrier_licences')
+    .upsert({ ...payload, tenant_id: session.tenantId } as any)
   if (error) throw new Error(error.message)
   return { success: true }
 }
 
 export async function deleteCarrierLicenceAction(id: string) {
-  await assertOffice()
-  const { error } = await supabaseAdmin.from('carrier_licences').delete().eq('id', id)
+  const session = await assertOffice()
+  const { error } = await supabaseAdmin
+    .from('carrier_licences')
+    .delete()
+    .eq('tenant_id', session.tenantId)
+    .eq('id', id)
   if (error) throw new Error(error.message)
   return { success: true }
+}
+
+// ============================================================
+// TENANT-SCOPED READS (replace the old client-side lib/api.ts)
+// ============================================================
+
+export async function getDispatchJobsAction(targetDate: string) {
+  const session = await assertOffice()
+  const server = await import('@/lib/api-server')
+  return server.getDispatchJobs(session.tenantId, targetDate)
+}
+
+export async function getLorriesAction() {
+  const session = await assertOffice()
+  const server = await import('@/lib/api-server')
+  return server.getLorries(session.tenantId)
+}
+
+export async function getDriversListAction() {
+  const session = await assertOffice()
+  const server = await import('@/lib/api-server')
+  return server.getDriversList(session.tenantId)
+}
+
+export async function getCustomPricingListAction() {
+  const session = await assertOffice()
+  const server = await import('@/lib/api-server')
+  return server.getCustomPricingList(session.tenantId)
+}
+
+export async function getStoredTareAction(reg: string, skipSize: string) {
+  const session = await assertOffice()
+  const server = await import('@/lib/api-server')
+  return server.getStoredTare(session.tenantId, reg, skipSize)
 }

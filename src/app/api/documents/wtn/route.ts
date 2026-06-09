@@ -8,8 +8,16 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { DEFAULT_CONFIG } from '@/lib/config'
+import { resolveOfficeSession, getSessionFromRequest } from '@/lib/session'
+import { getCompanyName } from '@/lib/api-server'
 
 export async function GET(request: Request) {
+  const session = (await resolveOfficeSession()) ?? (await getSessionFromRequest(request))
+  if (!session || session.role === 'portal') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const companyName = await getCompanyName(session.tenantId)
+
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
 
@@ -20,6 +28,7 @@ export async function GET(request: Request) {
   const { data: wtn, error } = await supabaseAdmin
     .from('waste_transfer_notes')
     .select('*')
+    .eq('tenant_id', session.tenantId)
     .eq('id', id)
     .single()
 
@@ -153,7 +162,7 @@ export async function GET(request: Request) {
     <div>
       <div class="doc-title">Waste Transfer Note</div>
       <div class="doc-subtitle">
-        Enviroworx Ltd &nbsp;|&nbsp; Waste Carrier Licence: ${DEFAULT_CONFIG.officePhone ? 'CBDU______' : 'CBDU______'}<br>
+        ${companyName} &nbsp;|&nbsp; Waste Carrier Licence: CBDU______<br>
         ${DEFAULT_CONFIG.officeAddress || 'Edinburgh, Scotland'} &nbsp;|&nbsp; Tel: ${DEFAULT_CONFIG.officePhone}
       </div>
     </div>
@@ -251,7 +260,7 @@ export async function GET(request: Request) {
       <div class="sig-hint">Print Name &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Job Title: ___________</div>
     </div>
     <div class="sig-box">
-      <div class="sig-party">Transferee (Enviroworx Representative)</div>
+      <div class="sig-party">Transferee (${companyName} Representative)</div>
       <p style="font-size:9px;color:#555">I certify that the information given above is correct to the best of my knowledge.</p>
       <div class="sig-line"></div>
       <div class="sig-hint">Signature &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Date: ___________</div>
@@ -262,7 +271,7 @@ export async function GET(request: Request) {
 
   <!-- Footer -->
   <div class="footer">
-    Enviroworx Ltd &nbsp;|&nbsp; Registered in Scotland &nbsp;|&nbsp; VAT: ${DEFAULT_CONFIG.vatNumber}<br>
+    ${companyName} &nbsp;|&nbsp; VAT: ${DEFAULT_CONFIG.vatNumber}<br>
     ${wtn.wtn_number} &nbsp;|&nbsp; Generated: ${new Date().toLocaleString('en-GB')}<br>
     This document satisfies the Duty of Care requirements under the Environmental Protection Act 1990, Section 34.
   </div>

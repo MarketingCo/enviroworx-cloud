@@ -8,8 +8,19 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { DEFAULT_CONFIG } from '@/lib/config'
+import { resolveOfficeSession } from '@/lib/session'
+import { getCompanyName } from '@/lib/api-server'
+
+// Programmatic callers authenticated by x-api-key (see middleware) have no
+// session — they operate on the original tenant.
+const DEFAULT_TENANT_ID = '56ec5b3f-6d42-4672-a98c-d60d9c22f284'
 
 export async function GET(request: Request) {
+  // Middleware has already authenticated (office Google session or x-api-key).
+  const session = await resolveOfficeSession()
+  const tenantId = session?.tenantId ?? DEFAULT_TENANT_ID
+  const companyName = await getCompanyName(tenantId)
+
   const { searchParams } = new URL(request.url)
   const type = searchParams.get('type')
   const start = searchParams.get('start')
@@ -28,6 +39,7 @@ export async function GET(request: Request) {
       headers = ['Date', 'Ticket', 'Customer', 'Lorry Reg', 'Address', 'Waste Type', 'Direction', 'Net Weight (kg)']
       const { data: wlData } = await supabaseAdmin.from('weight_logs')
         .select('*')
+        .eq('tenant_id', tenantId)
         .gte('logged_at', start)
         .lte('logged_at', end + 'T23:59:59')
         .order('logged_at')
@@ -50,6 +62,7 @@ export async function GET(request: Request) {
       headers = ['Date', 'Ticket', 'Customer', 'Waste Type', 'Net Weight', 'Cost Net', 'Cost Gross', 'Amount Paid', 'Payment Method']
       const { data: finData } = await supabaseAdmin.from('cash_log')
         .select('*')
+        .eq('tenant_id', tenantId)
         .gte('logged_at', start)
         .lte('logged_at', end + 'T23:59:59')
         .order('logged_at')
@@ -66,6 +79,7 @@ export async function GET(request: Request) {
       headers = ['Driver', 'Date', 'Customer', 'Address', 'Job Type', 'Size', 'Skip ID']
       const { data } = await supabaseAdmin.from('orders')
         .select('*')
+        .eq('tenant_id', tenantId)
         .gte('date', start)
         .lte('date', end)
         .eq('status', 'Completed')
@@ -82,6 +96,7 @@ export async function GET(request: Request) {
       headers = ['Customer', 'Invoice Date', 'Description', 'Item', 'Net Amount', 'VAT', 'Total Gross']
       const { data: orders } = await supabaseAdmin.from('orders')
         .select('*')
+        .eq('tenant_id', tenantId)
         .gte('date', start).lte('date', end)
         .eq('status', 'Completed')
         .eq('payment_method', 'Invoice')
@@ -89,6 +104,7 @@ export async function GET(request: Request) {
 
       const { data: cashLogs } = await supabaseAdmin.from('cash_log')
         .select('*')
+        .eq('tenant_id', tenantId)
         .gte('logged_at', start).lte('logged_at', end + 'T23:59:59')
         .eq('payment_method', 'Invoice')
 
@@ -119,6 +135,7 @@ export async function GET(request: Request) {
       headers = ['Skip ID', 'Size', 'Status', 'Address', 'Customer', 'Days on Hire']
       const { data } = await supabaseAdmin.from('inventory')
         .select('*')
+        .eq('tenant_id', tenantId)
         .in('status', ['Delivered', 'In Use'])
 
       rows = (data ?? []).map(r => {
@@ -139,7 +156,7 @@ export async function GET(request: Request) {
   return new NextResponse(csv, {
     headers: {
       'Content-Type': 'text/csv',
-      'Content-Disposition': `attachment; filename="Enviroworx_${type}_${start}_${end}.csv"`,
+      'Content-Disposition': `attachment; filename="${companyName.replace(/[^\w-]/g, '_')}_${type}_${start}_${end}.csv"`,
     },
   })
 }

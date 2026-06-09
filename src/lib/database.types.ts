@@ -1006,6 +1006,7 @@ export type Database = {
           metadata: Json | null
           name: string
           style_url: string | null
+          tenant_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -1018,6 +1019,7 @@ export type Database = {
           metadata?: Json | null
           name: string
           style_url?: string | null
+          tenant_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -1030,9 +1032,18 @@ export type Database = {
           metadata?: Json | null
           name?: string
           style_url?: string | null
+          tenant_id?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "external_map_points_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       fleet_logs: {
         Row: {
@@ -1642,6 +1653,7 @@ export type Database = {
           planned_arrival: string | null
           planned_duration_mins: number | null
           route_plan_id: string | null
+          tenant_id: string | null
         }
         Insert: {
           actual_arrival?: string | null
@@ -1653,6 +1665,7 @@ export type Database = {
           planned_arrival?: string | null
           planned_duration_mins?: number | null
           route_plan_id?: string | null
+          tenant_id?: string | null
         }
         Update: {
           actual_arrival?: string | null
@@ -1664,6 +1677,7 @@ export type Database = {
           planned_arrival?: string | null
           planned_duration_mins?: number | null
           route_plan_id?: string | null
+          tenant_id?: string | null
         }
         Relationships: [
           {
@@ -1687,6 +1701,13 @@ export type Database = {
             referencedRelation: "route_plans"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "route_performance_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
         ]
       }
       route_plans: {
@@ -1699,6 +1720,7 @@ export type Database = {
           plan_date: string
           route_sequence: Json
           status: string | null
+          tenant_id: string | null
           total_distance_km: number | null
           total_duration_mins: number | null
           vehicle_id: string | null
@@ -1712,6 +1734,7 @@ export type Database = {
           plan_date: string
           route_sequence: Json
           status?: string | null
+          tenant_id?: string | null
           total_distance_km?: number | null
           total_duration_mins?: number | null
           vehicle_id?: string | null
@@ -1725,6 +1748,7 @@ export type Database = {
           plan_date?: string
           route_sequence?: Json
           status?: string | null
+          tenant_id?: string | null
           total_distance_km?: number | null
           total_duration_mins?: number | null
           vehicle_id?: string | null
@@ -1735,6 +1759,13 @@ export type Database = {
             columns: ["driver_id"]
             isOneToOne: false
             referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "route_plans_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
           {
@@ -1854,6 +1885,7 @@ export type Database = {
           size: string
           skip_id: string
           status: string | null
+          tenant_id: string | null
           yard_location: string | null
         }
         Insert: {
@@ -1865,6 +1897,7 @@ export type Database = {
           size: string
           skip_id: string
           status?: string | null
+          tenant_id?: string | null
           yard_location?: string | null
         }
         Update: {
@@ -1876,6 +1909,7 @@ export type Database = {
           size?: string
           skip_id?: string
           status?: string | null
+          tenant_id?: string | null
           yard_location?: string | null
         }
         Relationships: [
@@ -1884,6 +1918,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "skips_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -2389,16 +2430,20 @@ export type Database = {
       weight_logs: {
         Row: {
           address: string | null
+          created_by: string | null
           customer_name: string
           direction: string | null
           ewc_code: string | null
           ewc_code_id: string | null
           gross_weight: number | null
           id: string
+          invoice_status: string | null
+          is_cash: boolean | null
           logged_at: string | null
           lorry_reg: string | null
           net_weight: number | null
           notes: string | null
+          payment_method: string | null
           skip_id: string | null
           skip_size: string | null
           tare_weight: number | null
@@ -2408,16 +2453,20 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          created_by?: string | null
           customer_name: string
           direction?: string | null
           ewc_code?: string | null
           ewc_code_id?: string | null
           gross_weight?: number | null
           id?: string
+          invoice_status?: string | null
+          is_cash?: boolean | null
           logged_at?: string | null
           lorry_reg?: string | null
           net_weight?: number | null
           notes?: string | null
+          payment_method?: string | null
           skip_id?: string | null
           skip_size?: string | null
           tare_weight?: number | null
@@ -2427,16 +2476,20 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          created_by?: string | null
           customer_name?: string
           direction?: string | null
           ewc_code?: string | null
           ewc_code_id?: string | null
           gross_weight?: number | null
           id?: string
+          invoice_status?: string | null
+          is_cash?: boolean | null
           logged_at?: string | null
           lorry_reg?: string | null
           net_weight?: number | null
           notes?: string | null
+          payment_method?: string | null
           skip_id?: string | null
           skip_size?: string | null
           tare_weight?: number | null
@@ -2506,6 +2559,7 @@ export type Database = {
           delivery_date: string | null
           skip_id: string | null
           skip_size: string | null
+          tenant_id: string | null
         }
         Insert: {
           address?: string | null
@@ -2514,6 +2568,7 @@ export type Database = {
           delivery_date?: string | null
           skip_id?: string | null
           skip_size?: string | null
+          tenant_id?: string | null
         }
         Update: {
           address?: string | null
@@ -2522,16 +2577,34 @@ export type Database = {
           delivery_date?: string | null
           skip_id?: string | null
           skip_size?: string | null
+          tenant_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "inventory_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_dashboard_stats: {
         Row: {
           completed_today: number | null
           completed_week: number | null
           future_bookings: number | null
+          tenant_id: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_driver_hours_today: {
         Row: {
@@ -2540,8 +2613,17 @@ export type Database = {
           driver_name: string | null
           hours_today: number | null
           last_clock_in: string | null
+          tenant_id: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "drivers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_inventory_summary: {
         Row: {
@@ -2549,15 +2631,33 @@ export type Database = {
           damaged: number | null
           out_on_hire: number | null
           skip_size: string | null
+          tenant_id: string | null
           total: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "inventory_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_tips_today: {
         Row: {
+          tenant_id: string | null
           tips_today: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "cash_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_unpaid_invoices: {
         Row: {
@@ -2568,6 +2668,7 @@ export type Database = {
           id: string | null
           skip_id: string | null
           source: string | null
+          tenant_id: string | null
         }
         Relationships: []
       }

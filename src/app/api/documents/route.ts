@@ -10,34 +10,64 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { WASTE_CODES, DEFAULT_CONFIG } from '@/lib/config'
+import { resolveOfficeSession, getSessionFromRequest, type AppSession } from '@/lib/session'
+import { getCompanyName } from '@/lib/api-server'
+
+type DocContext = {
+  tenantId: string
+  role: AppSession['role']
+  sub: string
+  name: string
+  companyName: string
+}
 
 export async function GET(request: Request) {
+  // Office (Google) session, or PIN-cookie session (driver/yard/portal).
+  const session = (await resolveOfficeSession()) ?? (await getSessionFromRequest(request))
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const ctx: DocContext = {
+    tenantId: session.tenantId,
+    role: session.role,
+    sub: session.sub,
+    name: session.name,
+    companyName: await getCompanyName(session.tenantId),
+  }
+
   const { searchParams } = new URL(request.url)
   const type = searchParams.get('type')
 
-  if (type === 'WTN') return generateWTN(searchParams)
-  if (type === 'DTN') return generateDTN(searchParams)
-  if (type === 'INVOICE') return generateInvoice(searchParams)
+  // Portal customers may only fetch their own invoices.
+  if (ctx.role === 'portal' && type !== 'INVOICE') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  if (type === 'WTN') return generateWTN(searchParams, ctx)
+  if (type === 'DTN') return generateDTN(searchParams, ctx)
+  if (type === 'INVOICE') return generateInvoice(searchParams, ctx)
   return NextResponse.json({ error: 'Invalid type. Use WTN, DTN, or INVOICE.' }, { status: 400 })
 }
 
-async function generateWTN(params: URLSearchParams) {
+async function generateWTN(params: URLSearchParams, ctx: DocContext) {
   const ticketNumber = params.get('ticketNumber')
   if (!ticketNumber) return NextResponse.json({ error: 'Missing ticketNumber' }, { status: 400 })
 
   // Fetch weight log + cash log for this ticket
   const { data: wlRaw } = await supabaseAdmin.from('weight_logs')
     .select('*')
+    .eq('tenant_id', ctx.tenantId)
     .eq('ticket_number', ticketNumber)
-    .single()
+    .maybeSingle()
 
   const wl = wlRaw as any
   if (!wl) return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
 
   const { data: cl } = await supabaseAdmin.from('cash_log')
     .select('*')
+    .eq('tenant_id', ctx.tenantId)
     .eq('ticket_number', ticketNumber)
-    .single()
+    .maybeSingle()
 
   const ewcCode = WASTE_CODES[(wl.waste_type ?? '') as string] || '20 03 01'
   const net = Math.abs((wl.gross_weight || 0) - (wl.tare_weight || 0))
@@ -71,7 +101,7 @@ async function generateWTN(params: URLSearchParams) {
     <div>
       <h1>WASTE TRANSFER NOTE</h1>
       <div class="company">
-        Enviroworx Ltd | Waste Carrier Licence: CBDU______<br>
+        ${ctx.companyName} | Waste Carrier Licence: CBDU______<br>
         Site: ______ | Tel: ${DEFAULT_CONFIG.officePhone}
       </div>
     </div>
@@ -119,7 +149,7 @@ async function generateWTN(params: URLSearchParams) {
       <div class="sig-label">Print Name</div>
     </div>
     <div class="sig-box">
-      <strong>Transferee (Enviroworx)</strong>
+      <strong>Transferee (${ctx.companyName})</strong>
       <div class="sig-line"></div>
       <div class="sig-label">Signature & Date</div>
       <div class="sig-line" style="margin-top:20px"></div>
@@ -130,7 +160,7 @@ async function generateWTN(params: URLSearchParams) {
   ${wl.notes ? `<h2>Notes</h2><p>${wl.notes}</p>` : ''}
 
   <div class="footer">
-    Enviroworx Ltd — Waste Transfer Note generated ${new Date().toISOString()}<br>
+    ${ctx.companyName} — Waste Transfer Note generated ${new Date().toISOString()}<br>
     This document satisfies the requirements of Section 34 of the Environmental Protection Act 1990 and the Environmental Protection (Duty of Care) Regulations 1991.
   </div>
 </body></html>`
@@ -143,14 +173,15 @@ async function generateWTN(params: URLSearchParams) {
   })
 }
 
-async function generateDTN(params: URLSearchParams) {
+async function generateDTN(params: URLSearchParams, ctx: DocContext) {
   const orderId = params.get('orderId')
   if (!orderId) return NextResponse.json({ error: 'Missing orderId' }, { status: 400 })
 
   const { data: order } = await supabaseAdmin.from('orders')
     .select('*, customer:customers(name, phone, billing_address)')
+    .eq('tenant_id', ctx.tenantId)
     .eq('id', orderId)
-    .single()
+    .maybeSingle()
 
   if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
 
@@ -182,7 +213,7 @@ async function generateDTN(params: URLSearchParams) {
     <div>
       <h1>DRIVER TRANSFER NOTE</h1>
       <div class="company">
-        Enviroworx Ltd | Waste Carrier Licence: CBDU______<br>
+        ${ctx.companyName} | Waste Carrier Licence: CBDU______<br>
         Site: ______ | Tel: ${DEFAULT_CONFIG.officePhone}
       </div>
     </div>
@@ -211,7 +242,7 @@ async function generateDTN(params: URLSearchParams) {
 
   <h2>Customer Acknowledgement</h2>
   <p style="color:#666;font-size:10px;margin-bottom:15px">
-    I acknowledge receipt of the skip described above at the address listed. I accept responsibility for ensuring the skip is used in accordance with Enviroworx terms and conditions.
+    I acknowledge receipt of the skip described above at the address listed. I accept responsibility for ensuring the skip is used in accordance with ${ctx.companyName} terms and conditions.
     Overfilling, hazardous waste, or prohibited materials will incur additional charges.
   </p>
 
@@ -233,7 +264,7 @@ async function generateDTN(params: URLSearchParams) {
   </div>
 
   <div class="footer">
-    Enviroworx Ltd — Driver Transfer Note generated ${new Date().toISOString()}<br>
+    ${ctx.companyName} — Driver Transfer Note generated ${new Date().toISOString()}<br>
     Skip hire subject to standard terms and conditions. Maximum hire period ${DEFAULT_CONFIG.demurrageDays} days before demurrage charges apply.
   </div>
 </body></html>`
@@ -248,10 +279,13 @@ async function generateDTN(params: URLSearchParams) {
 
 // ─── Invoice Generator ───────────────────────────────────────────────────────
 
-async function generateInvoice(params: URLSearchParams) {
-  const customerId  = params.get('customerId')
-  const orderId     = params.get('orderId')   // optional — single order
+async function generateInvoice(params: URLSearchParams, ctx: DocContext) {
+  let customerId  = params.get('customerId')
+  const orderId   = params.get('orderId')   // optional — single order
   const invoiceRef  = `INV-${Date.now().toString(36).toUpperCase()}`
+
+  // Portal customers can only invoice their own account.
+  if (ctx.role === 'portal') customerId = ctx.sub
 
   if (!customerId && !orderId) {
     return NextResponse.json({ error: 'Provide customerId or orderId' }, { status: 400 })
@@ -261,19 +295,35 @@ async function generateInvoice(params: URLSearchParams) {
   let customer: any = null
 
   if (orderId) {
-    const { data } = await supabaseAdmin.from('orders').select('*').eq('id', orderId).single()
+    const { data } = await supabaseAdmin.from('orders')
+      .select('*')
+      .eq('tenant_id', ctx.tenantId)
+      .eq('id', orderId)
+      .maybeSingle()
     if (!data) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    if (ctx.role === 'portal' && data.customer_id !== ctx.sub) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     orders = [data]
     // Get customer
     const { data: cust } = await supabaseAdmin.from('customers')
-      .select('*').ilike('name', data.customer_name ?? '').single()
+      .select('*')
+      .eq('tenant_id', ctx.tenantId)
+      .ilike('name', data.customer_name ?? '')
+      .limit(1)
+      .maybeSingle()
     customer = cust
   } else {
-    const { data: cust } = await supabaseAdmin.from('customers').select('*').eq('id', customerId as string).single()
+    const { data: cust } = await supabaseAdmin.from('customers')
+      .select('*')
+      .eq('tenant_id', ctx.tenantId)
+      .eq('id', customerId as string)
+      .maybeSingle()
     if (!cust) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
     customer = cust
     const { data: ords } = await supabaseAdmin.from('orders')
       .select('*')
+      .eq('tenant_id', ctx.tenantId)
       .ilike('customer_name', cust.name)
       .eq('status', 'Completed')
       .eq('paid', false)
@@ -331,9 +381,9 @@ async function generateInvoice(params: URLSearchParams) {
 
 <div class="header">
   <div>
-    <div class="co-name">ENVIROWORX</div>
+    <div class="co-name">${ctx.companyName.toUpperCase()}</div>
     <div class="co-info">
-      Enviroworx Ltd<br>
+      ${ctx.companyName}<br>
       ${DEFAULT_CONFIG.officeAddress || 'Edinburgh, Scotland'}<br>
       ${DEFAULT_CONFIG.officePhone || ''} · ${DEFAULT_CONFIG.officeEmail || 'accounts@enviroworx.co.uk'}<br>
       VAT Reg: ${DEFAULT_CONFIG.vatNumber || 'GB000000000'}
@@ -398,7 +448,7 @@ async function generateInvoice(params: URLSearchParams) {
 </div>
 
 <div class="footer">
-  Enviroworx Ltd · Registered in Scotland · ${invoiceRef} · Generated ${new Date().toISOString()}<br>
+  ${ctx.companyName} · ${invoiceRef} · Generated ${new Date().toISOString()}<br>
   This document was computer generated. For queries call ${DEFAULT_CONFIG.officePhone || '0131 000 0000'}.
 </div>
 

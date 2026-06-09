@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase-browser'
 import { DEFAULT_CONFIG } from '@/lib/config'
 import toast from 'react-hot-toast'
 import { Truck, RefreshCw, Zap, X, CheckCircle, DollarSign } from 'lucide-react'
-import { getDispatchJobs } from '@/lib/api'
+import { getDispatchJobsAction as getDispatchJobs } from '@/app/actions/office-data'
 import { assignDriverToJobAction, autoAssignJobsAction, cancelBookingAction } from '@/app/actions/operations'
 import { syncOrderToQuickBooks } from '@/app/actions/quickbooks'
 

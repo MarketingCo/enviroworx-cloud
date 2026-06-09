@@ -11,6 +11,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   try {
+    // The cron serves every tenant — each SMS is branded with the
+    // owning tenant's company name.
+    const { data: tenants } = await supabaseAdmin.from('tenants').select('id, company_name')
+    const companyByTenant = new Map((tenants ?? []).map(t => [t.id, t.company_name]))
+    const companyFor = (tenantId: string | null) =>
+      (tenantId && companyByTenant.get(tenantId)) || DEFAULT_CONFIG.companyName || 'Enviroworx'
+
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
     const tomorrowStr = tomorrow.toISOString().split('T')[0]
@@ -29,7 +36,7 @@ export async function GET(request: Request) {
     let sent = 0
     for (const col of collections || []) {
       if (!col.phone) continue
-      const message = `Hi ${col.customer_name}, this is Enviroworx. Just a reminder that we are scheduled to collect your skip tomorrow (${tomorrowStr}) at ${col.address}. Please ensure access is clear. Thanks!`
+      const message = `Hi ${col.customer_name}, this is ${companyFor(col.tenant_id)}. Just a reminder that we are scheduled to collect your skip tomorrow (${tomorrowStr}) at ${col.address}. Please ensure access is clear. Thanks!`
       const res = await sendSms(col.phone, message)
       if (res.success) sent++
     }
@@ -43,7 +50,7 @@ export async function GET(request: Request) {
 
     const { data: overstays } = await supabaseAdmin
       .from('inventory')
-      .select('skip_id, skip_size, customer_name, customer_phone, delivery_address, delivery_date, comments')
+      .select('tenant_id, skip_id, skip_size, customer_name, customer_phone, delivery_address, delivery_date, comments')
       .in('status', ['Delivered', 'In Use'])
       .not('customer_phone', 'is', null)
       .lt('delivery_date', cutoffStr)
@@ -61,14 +68,18 @@ export async function GET(request: Request) {
         : DEFAULT_CONFIG.demurrageDays
       const message =
         `Hi ${skip.customer_name ?? 'there'}, your ${skip.skip_size}yd skip at ${skip.delivery_address ?? 'your site'} has been in position for ${days} days. ` +
-        `Please call ${DEFAULT_CONFIG.officePhone} to arrange collection or extend your hire. Enviroworx.`
+        `Please call ${DEFAULT_CONFIG.officePhone} to arrange collection or extend your hire. ${companyFor(skip.tenant_id)}.`
       const res = await sendSms(skip.customer_phone, message)
       if (res.success) {
         overstaySent++
         // Record reminder date in comments to prevent daily repeat
         const tag = `[OVERSTAY_SMS:${new Date().toISOString().split('T')[0]}]`
         const newComments = ((skip.comments || '') + ' ' + tag).trim()
-        await supabaseAdmin.from('inventory').update({ comments: newComments }).eq('skip_id', skip.skip_id)
+        await supabaseAdmin
+          .from('inventory')
+          .update({ comments: newComments })
+          .eq('tenant_id', skip.tenant_id!)
+          .eq('skip_id', skip.skip_id)
       }
     }
 

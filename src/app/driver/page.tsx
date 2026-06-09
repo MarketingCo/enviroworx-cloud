@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { getDriverJobs } from '@/lib/api'
-import { completeJobAction, clockInOutAction, driverOnSiteAction } from '@/app/actions/operations'
+import { getDriverJobsAction, completeJobAction, clockInOutAction, driverOnSiteAction } from '@/app/actions/operations'
 import {
   getDriverQueue,
   setDriverQueue,
@@ -102,7 +101,9 @@ export default function DriverApp() {
     setLoaderText('Building Route...')
     setLoading(true)
     try {
-      const result = await getDriverJobs(name)
+      // Jobs come from the driver's session (set at PIN login) — the name
+      // here is only used to decide whether a driver is selected.
+      const result = await getDriverJobsAction()
       setJobs(result.jobs)
       setScreen('jobs')
     } catch (e: any) {

@@ -2,9 +2,13 @@
 
 import { sendSms } from '@/lib/sms'
 import { supabaseAdmin, safeActivityLog } from '@/lib/supabase'
+import { requireDriverSession } from '@/lib/session'
+import { getCompanyName } from '@/lib/api-server'
 
 export async function abortJobWithNotification(orderId: string, reason: string) {
   try {
+    const session = await requireDriverSession()
+
     // 1. Update order status
     const { data: order, error: updateError } = await supabaseAdmin
       .from('orders')
@@ -12,6 +16,7 @@ export async function abortJobWithNotification(orderId: string, reason: string) 
         status: 'Aborted' as any,
         delivery_comments: reason,
       })
+      .eq('tenant_id', session.tenantId)
       .eq('id', orderId)
       .select('*')
       .single()
@@ -20,7 +25,8 @@ export async function abortJobWithNotification(orderId: string, reason: string) 
 
     // 2. Send SMS if reason is 'No Access' related or just always send for transparency
     if (order.phone) {
-      const message = `Hi ${order.customer_name}, Enviroworx was unable to complete your ${order.job_type} today at ${order.address}. Reason: ${reason}. Please contact the office to reschedule. Thanks!`
+      const companyName = await getCompanyName(session.tenantId)
+      const message = `Hi ${order.customer_name}, ${companyName} was unable to complete your ${order.job_type} today at ${order.address}. Reason: ${reason}. Please contact the office to reschedule. Thanks!`
       await sendSms(order.phone, message)
     }
 

@@ -4,8 +4,16 @@ import { logToDrive } from '@/app/actions/drive'
 /**
  * Push unpaid invoices in the date range to the SEPA Google Sheet (via Drive API).
  * Used by Vercel cron (Bearer CRON_SECRET) and by the office Reports tab (server action).
+ * The Drive integration uses the original tenant's credentials, so the cron
+ * defaults to that tenant; the office action passes the session's tenant.
  */
-export async function runMonthlySepaDriveSync(startDate: string, endDate: string): Promise<{
+const DEFAULT_TENANT_ID = '56ec5b3f-6d42-4672-a98c-d60d9c22f284'
+
+export async function runMonthlySepaDriveSync(
+  startDate: string,
+  endDate: string,
+  tenantId: string = DEFAULT_TENANT_ID
+): Promise<{
   success: boolean
   count?: number
   message?: string
@@ -16,6 +24,7 @@ export async function runMonthlySepaDriveSync(startDate: string, endDate: string
   const { data: unpaidInvoices, error: vError } = await supabaseAdmin
     .from('v_unpaid_invoices')
     .select('*')
+    .eq('tenant_id', tenantId)
     .gte('date', start.split('T')[0])
     .lte('date', end.split('T')[0])
 
