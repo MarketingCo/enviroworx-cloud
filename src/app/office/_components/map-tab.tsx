@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase-browser'
 import { SKIP_SIZES, DEFAULT_CONFIG } from '@/lib/config'
 import toast from 'react-hot-toast'
 import KmlSyncButton from '@/components/KmlSyncButton'
+import AddressAutocomplete from '@/components/AddressAutocomplete'
 import { MapPin, X } from 'lucide-react'
 import { MarkerClusterer } from '@googlemaps/markerclusterer'
 import {
@@ -73,6 +74,7 @@ export function MapTab() {
   const [loading, setLoading] = useState(true)
   const [ready, setReady] = useState(false)
   const [placeForm, setPlaceForm] = useState<PlaceForm | null>(null)
+  const [mapSearch, setMapSearch] = useState('')
 
   const [visibleLayers, setVisibleLayers] = useState<Record<string, boolean>>({
     'Live Trucks': true,
@@ -450,6 +452,31 @@ export function MapTab() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4" style={{ height: '650px' }}>
         <div className="lg:col-span-3 bg-slate-900 rounded-2xl overflow-hidden relative border border-white/5 shadow-2xl">
           <div id="office-map-canvas" className="w-full h-full" />
+
+          <div className="absolute top-4 left-4 z-10 w-72">
+            <AddressAutocomplete
+              value={mapSearch}
+              onChange={setMapSearch}
+              onResolved={({ address, lat, lng }) => {
+                if (lat == null || lng == null) return
+                mapRef.current?.panTo({ lat, lng })
+                mapRef.current?.setZoom(17)
+                setMapSearch('')
+                setPlaceForm({
+                  lat,
+                  lng,
+                  skipSize: '8',
+                  customerName: '',
+                  customerPhone: '',
+                  address,
+                  comments: '',
+                  saving: false,
+                })
+              }}
+              placeholder="Search an address…"
+              className="w-full bg-slate-900/95 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-slate-500 shadow-2xl"
+            />
+          </div>
 
           {placeForm && (
             <div className="absolute top-4 right-4 z-10 w-72 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl p-4 space-y-3">
