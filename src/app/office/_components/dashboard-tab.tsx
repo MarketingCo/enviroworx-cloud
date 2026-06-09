@@ -47,7 +47,7 @@ export function DashboardTab({ data, onRefresh }: { data: DashStats | null; onRe
                 <div key={p.id} className="bg-slate-900/50 p-3 rounded-lg border border-red-500/10 flex justify-between items-center">
                   <div>
                     <p className="text-white font-bold text-sm">{p.location}</p>
-                    <p className="text-[10px] text-red-400 font-black uppercase">Expires: {new Date(p.expiry_date).toLocaleDateString()}</p>
+                    <p className="text-xs text-red-400 font-black uppercase">Expires: {new Date(p.expiry_date).toLocaleDateString()}</p>
                   </div>
                   <Badge label={p.status} color="bg-red-900/40 text-red-400" />
                 </div>
@@ -186,7 +186,7 @@ export function DashboardTab({ data, onRefresh }: { data: DashStats | null; onRe
                               onClick={() => handleOverstaySms(c.skip_id)}
                               disabled={smsSending === c.skip_id}
                               title="SMS customer to arrange collection"
-                              className="text-[10px] font-black uppercase bg-orange-900/40 hover:bg-orange-500 text-orange-400 hover:text-white px-2 py-1 rounded transition-all disabled:opacity-50"
+                              className="text-xs font-black uppercase bg-orange-900/40 hover:bg-orange-500 text-orange-400 hover:text-white px-2 py-1 rounded transition-all disabled:opacity-50"
                             >
                               {smsSending === c.skip_id ? '...' : 'SMS'}
                             </button>

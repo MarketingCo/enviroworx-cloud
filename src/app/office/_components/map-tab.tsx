@@ -554,7 +554,7 @@ export function MapTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-black text-white uppercase tracking-tighter italic">Skip Map</h2>
+          <h2 className="text-lg font-black text-white uppercase tracking-tighter">Skip Map</h2>
           <p className="text-xs text-slate-500">Click anywhere on the map to drop a skip · drag a pin to move it</p>
         </div>
         <div className="flex gap-2">
@@ -665,7 +665,7 @@ export function MapTab() {
                 placeholder="Skip ID (optional — reuse existing)"
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500"
               />
-              <p className="text-[10px] text-slate-500">
+              <p className="text-xs text-slate-500">
                 📍 {placeForm.lat.toFixed(5)}, {placeForm.lng.toFixed(5)}
               </p>
               <button
@@ -680,7 +680,7 @@ export function MapTab() {
         </div>
 
         <div className="space-y-2 overflow-y-auto pr-1 custom-scrollbar max-h-[40vh] lg:max-h-none lg:h-[70vh]">
-          <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">
+          <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-widest px-1">
             Skips on site ({skips.length})
           </h3>
           {skips.map((skip) => (

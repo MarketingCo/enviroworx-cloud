@@ -159,11 +159,11 @@ export function FleetTab() {
                   <p className="font-black text-white text-sm">{d.name}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <span className={`w-1.5 h-1.5 rounded-full ${d.status === 'Available' ? 'bg-emerald-500' : 'bg-slate-600'}`}></span>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">{d.status || 'Offline'}</span>
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-tighter">{d.status || 'Offline'}</span>
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Access PIN</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Access PIN</label>
                   <input
                     type="password"
                     defaultValue={d.pin}
@@ -257,7 +257,7 @@ export function FleetTab() {
                         <Badge label={iss.issue_type} color="bg-red-900/40 text-red-400" />
                         <button
                           onClick={() => resolveIssue(iss.id)}
-                          className="text-[10px] font-black text-green-400 border border-green-500/30 px-2 py-0.5 rounded hover:bg-green-900/20 transition"
+                          className="text-xs font-black text-green-400 border border-green-500/30 px-2 py-0.5 rounded hover:bg-green-900/20 transition"
                         >
                           Resolve
                         </button>

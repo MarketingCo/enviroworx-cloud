@@ -82,13 +82,13 @@ export function ActivityTab() {
                   >
                     {row.status || 'ok'}
                   </span>
-                  <p className="text-[10px] text-slate-600 mt-1 font-mono">
+                  <p className="text-xs text-slate-500 mt-1 font-mono">
                     {row.created_at ? new Date(row.created_at).toLocaleString('en-GB') : ''}
                   </p>
                 </div>
               </div>
               {row.type ? (
-                <p className="text-[10px] text-slate-600 font-mono mt-2 uppercase tracking-wider">{row.type}</p>
+                <p className="text-[11px] text-slate-500 font-mono mt-2 uppercase tracking-wider">{row.type}</p>
               ) : null}
             </li>
           ))}

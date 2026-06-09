@@ -139,7 +139,7 @@ export function DispatchTab() {
                   </div>
                   <p className="text-white font-bold mt-1">{job.customer_name}</p>
                   <p className="text-slate-400 text-xs">{job.address}</p>
-                  {job.delivery_comments && <p className="text-slate-500 text-xs italic mt-0.5">{job.delivery_comments}</p>}
+                  {job.delivery_comments && <p className="text-slate-500 text-xs mt-0.5">{job.delivery_comments}</p>}
                 </div>
                 <div className="flex items-center gap-2">
                   <select
@@ -187,7 +187,7 @@ export function DispatchTab() {
                       <button 
                         onClick={() => handleQBSync(job.id)}
                         disabled={isSynced}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-black uppercase transition-all ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-black uppercase transition-all ${
                           isSynced ? 'bg-green-900/20 text-green-500 cursor-default' : 'bg-primary/10 text-primary hover:bg-primary hover:text-white'
                         }`}
                       >
@@ -196,9 +196,9 @@ export function DispatchTab() {
                       </button>
                     )}
                     <div className="flex flex-col items-end">
-                      <span className="text-primary font-black text-[10px] uppercase tracking-tighter mb-1">{job.driver_name}</span>
+                      <span className="text-primary font-black text-xs uppercase tracking-tighter mb-1">{job.driver_name}</span>
                       <select
-                        className="bg-slate-800 border border-white/10 text-white px-2 py-1 rounded text-[10px]"
+                        className="bg-slate-800 border border-white/10 text-white px-2 py-1 rounded text-xs"
                         value={job.driver_name ?? ''}
                         onChange={e => handleAssign(job.id, e.target.value)}
                       >

@@ -98,12 +98,12 @@ export function BookingsTab() {
                     <div className="flex items-center gap-2">
                       <span className="font-black truncate">{c.name}</span>
                       {c.updated_at && (
-                        <span className="text-[8px] font-black uppercase tracking-tighter px-1 rounded bg-slate-950 text-slate-500 group-hover:bg-white/20 group-hover:text-slate-900">
+                        <span className="text-[10px] font-black uppercase tracking-tighter px-1 rounded bg-slate-950 text-slate-500 group-hover:bg-white/20 group-hover:text-slate-900">
                           Active
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] opacity-60 truncate">{c.billing_address || 'No address'}</p>
+                    <p className="text-xs opacity-60 truncate">{c.billing_address || 'No address'}</p>
                   </div>
                   <div className="text-right shrink-0">
                     <span className={`text-xs font-black ${c.account_balance > (DEFAULT_CONFIG.creditLimit || 500) ? 'text-red-400' : 'text-slate-400'}`}>
