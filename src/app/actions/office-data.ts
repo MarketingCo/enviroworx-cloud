@@ -233,6 +233,17 @@ export async function getDashboardStatsAction() {
     supabaseAdmin.from('cash_log').select('cost_gross, net_weight, waste_type').eq('tenant_id', tid).gte('logged_at', `${today}T00:00:00`),
   ])
 
+  // Order prices live in app config, not the DB, so the view returns 0 for
+  // Orders-source invoices — price them here (same logic as the customer timeline).
+  const pricedUnpaid = (unpaidInvoices ?? []).map((inv: any) => {
+    if (inv.source === 'Orders' && !inv.amount) {
+      const size = String(inv.skip_size ?? '').replace(/\D/g, '')
+      const net = DEFAULT_CONFIG.pricesSkip[size] || 0
+      return { ...inv, amount: net * (1 + DEFAULT_CONFIG.vatRate) }
+    }
+    return inv
+  })
+
   const totalRev = revenueData?.reduce((sum, r) => sum + (r.cost_gross || 0), 0) ?? 0
   const estDisposalCost =
     revenueData?.reduce((sum, r) => {
@@ -251,7 +262,7 @@ export async function getDashboardStatsAction() {
     },
     inventorySummary: inventorySummary ?? [],
     activeTippers: activeTippers ?? [],
-    unpaidInvoices: unpaidInvoices ?? [],
+    unpaidInvoices: pricedUnpaid,
     driverHours: driverHours ?? [],
     collections: collections ?? [],
     expiringPermits: expiringPermits ?? [],
@@ -623,6 +634,28 @@ export async function deleteCarrierLicenceAction(id: string) {
 // ============================================================
 // TENANT-SCOPED READS (replace the old client-side lib/api.ts)
 // ============================================================
+
+/** All pin layers for the office Skip Map, tenant-scoped. */
+export async function getMapDataAction() {
+  const session = await assertOffice()
+  const tid = session.tenantId
+  const today = new Date().toISOString().split('T')[0]
+
+  const [{ data: skips }, { data: vehicles }, { data: liveOrders }, { data: externalPoints }] =
+    await Promise.all([
+      supabaseAdmin.from('inventory').select('*').eq('tenant_id', tid).not('latitude', 'is', null),
+      supabaseAdmin.from('vehicles').select('*').eq('tenant_id', tid).not('latitude', 'is', null),
+      supabaseAdmin.from('orders').select('*').eq('tenant_id', tid).eq('date', today).not('latitude', 'is', null),
+      supabaseAdmin.from('external_map_points').select('*').eq('tenant_id', tid),
+    ])
+
+  return {
+    skips: skips ?? [],
+    vehicles: vehicles ?? [],
+    liveOrders: liveOrders ?? [],
+    externalPoints: externalPoints ?? [],
+  }
+}
 
 export async function getDispatchJobsAction(targetDate: string) {
   const session = await assertOffice()

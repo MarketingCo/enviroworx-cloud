@@ -28,7 +28,7 @@ export function DashboardTab({ data, onRefresh }: { data: DashStats | null; onRe
 
   if (!data) return <div className="flex items-center justify-center h-64 text-slate-500 text-sm">Loading dashboard...</div>
 
-  const totalUnpaid = data.unpaidInvoices.reduce((s: number, i: any) => s + (i.outstanding || 0), 0)
+  const totalUnpaid = data.unpaidInvoices.reduce((s: number, i: any) => s + (i.amount || 0), 0)
   const expiringPermits = data.expiringPermits || []
   const overstayDays = DEFAULT_CONFIG.demurrageDays || 28
 
@@ -77,7 +77,7 @@ export function DashboardTab({ data, onRefresh }: { data: DashStats | null; onRe
                 <span className="font-bold text-white">{row.skip_size}yd</span>
                 <div className="flex gap-3 text-xs">
                   <span className="text-green-400 font-bold">{row.available ?? 0} avail</span>
-                  <span className="text-blue-400 font-bold">{row.in_use ?? 0} out</span>
+                  <span className="text-blue-400 font-bold">{row.out_on_hire ?? 0} out</span>
                   {row.damaged > 0 && <span className="text-red-400 font-bold">{row.damaged} dmg</span>}
                 </div>
               </div>
@@ -111,10 +111,13 @@ export function DashboardTab({ data, onRefresh }: { data: DashStats | null; onRe
             ? <p className="text-slate-500 text-sm">No drivers clocked in</p>
             : <div className="space-y-2">
                 {data.driverHours.map((d: any, i: number) => (
-                  <div key={i} className="flex justify-between text-sm">
-                    <span className="text-white font-bold">{d.employee}</span>
-                    <span className={`font-black ${(d.hours_worked ?? 0) >= DEFAULT_CONFIG.warnDriveHours ? 'text-yellow-400' : 'text-primary'}`}>
-                      {(d.hours_worked ?? 0).toFixed(1)}h
+                  <div key={i} className="flex justify-between items-center text-sm">
+                    <span className="text-white font-bold flex items-center gap-1.5">
+                      {d.currently_clocked_in && <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" title="Clocked in" />}
+                      {d.driver_name}
+                    </span>
+                    <span className={`font-black ${(d.hours_today ?? 0) >= DEFAULT_CONFIG.warnDriveHours ? 'text-yellow-400' : 'text-primary'}`}>
+                      {Number(d.hours_today ?? 0).toFixed(1)}h
                     </span>
                   </div>
                 ))}
@@ -139,7 +142,7 @@ export function DashboardTab({ data, onRefresh }: { data: DashStats | null; onRe
                       <p className="text-white font-bold">{inv.customer_name}</p>
                       <p className="text-xs text-slate-500">{inv.date} · {inv.skip_size}</p>
                     </div>
-                    <span className="text-yellow-400 font-black">{fmt(inv.outstanding ?? 0)}</span>
+                    <span className="text-yellow-400 font-black">{fmt(inv.amount ?? 0)}</span>
                   </div>
                 ))
             }

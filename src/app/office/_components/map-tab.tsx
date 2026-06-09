@@ -11,6 +11,7 @@ import {
   moveSkipLocationAction,
   collectSkipFromMapAction,
 } from '@/app/actions/operations'
+import { getMapDataAction } from '@/app/actions/office-data'
 
 const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 const EDINBURGH = { lat: 55.9533, lng: -3.1883 }
@@ -88,18 +89,18 @@ export function MapTab() {
   }, [])
 
   async function loadMapData() {
-    const today = new Date().toISOString().split('T')[0]
-    const [{ data: sData }, { data: vData }, { data: oData }, { data: eData }] = await Promise.all([
-      supabase.from('inventory').select('*').not('latitude', 'is', null),
-      supabase.from('vehicles').select('*').not('latitude', 'is', null),
-      supabase.from('orders').select('*').eq('date', today).not('latitude', 'is', null),
-      (supabase.from('external_map_points').select('*') as unknown) as Promise<{data: {id:string;folder:string|null;name:string|null;description:string|null;latitude:number|null;longitude:number|null;icon:string|null;created_at:string|null}[]|null;error:unknown}>,
-    ])
-
-    const points = eData ?? []
-    setSkips(sData ?? [])
-    setVehicles(vData ?? [])
-    setLiveOrders(oData ?? [])
+    let data
+    try {
+      data = await getMapDataAction()
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not load map data')
+      setLoading(false)
+      return
+    }
+    const points = data.externalPoints
+    setSkips(data.skips)
+    setVehicles(data.vehicles)
+    setLiveOrders(data.liveOrders)
     setExternalPoints(points)
 
     const folders = [...new Set(points.map((p) => p.folder || 'Unknown'))]
