@@ -163,6 +163,7 @@ export function MapTab() {
 
   const mapRef = useRef<any>(null)
   const markersRef = useRef<any[]>([])
+  const markerByIdRef = useRef<Record<string, { marker: any; open: () => void }>>({})
   const skipClusterRef = useRef<MarkerClusterer | null>(null)
   const legacyClusterRef = useRef<MarkerClusterer | null>(null)
   const infoRef = useRef<any>(null)
@@ -221,6 +222,27 @@ export function MapTab() {
     setVisibleLayers((prev) => ({ ...prev, [name]: !prev[name] }))
   }
 
+  function layerCount(name: string) {
+    if (name === 'Active Skips') return skips.length
+    if (name === 'Live Orders') return liveOrders.length
+    if (name === 'Live Trucks') return vehicles.length
+    return externalPoints.filter((p) => (p.folder || 'Unknown') === name).length
+  }
+
+  /** Pan to a pin from its side-panel card and open its info window. */
+  function focusPin(id: string) {
+    const entry = markerByIdRef.current[id]
+    const map = mapRef.current
+    if (!entry || !map) return
+    const pos = entry.marker.position
+    const lat = typeof pos?.lat === 'function' ? pos.lat() : pos?.lat
+    const lng = typeof pos?.lng === 'function' ? pos.lng() : pos?.lng
+    if (lat == null || lng == null) return
+    map.panTo({ lat, lng })
+    if ((map.getZoom() ?? 0) < 15) map.setZoom(15)
+    entry.open()
+  }
+
   // ── Create the map once ────────────────────────────────────────────────
   useEffect(() => {
     if (!ready) return
@@ -228,6 +250,10 @@ export function MapTab() {
     const el = document.getElementById('office-map-canvas')
     if (!g || !el || mapRef.current) return
 
+    let savedType: string | null = null
+    try {
+      savedType = localStorage.getItem('ewx-map-type')
+    } catch {}
     const map = new g.maps.Map(el, {
       center: EDINBURGH,
       zoom: 11,
@@ -235,7 +261,12 @@ export function MapTab() {
       mapTypeControl: true,
       streetViewControl: true,
       fullscreenControl: true,
-      mapTypeId: 'roadmap',
+      mapTypeId: savedType || 'roadmap',
+    })
+    map.addListener('maptypeid_changed', () => {
+      try {
+        localStorage.setItem('ewx-map-type', map.getMapTypeId())
+      } catch {}
     })
     infoRef.current = new g.maps.InfoWindow()
     mapRef.current = map
@@ -266,6 +297,7 @@ export function MapTab() {
       m.map = null
     })
     markersRef.current = []
+    markerByIdRef.current = {}
     skipClusterRef.current?.clearMarkers()
     legacyClusterRef.current?.clearMarkers()
     const bounds = new g.maps.LatLngBounds()
@@ -287,11 +319,13 @@ export function MapTab() {
     }
 
     const openInfo = (marker: any, html: string, onReady?: () => void) => {
-      marker.addListener('click', () => {
+      const open = () => {
         infoRef.current.setContent(html)
         infoRef.current.open({ map, anchor: marker })
         if (onReady) g.maps.event.addListenerOnce(infoRef.current, 'domready', onReady)
-      })
+      }
+      marker.addListener('click', open)
+      return open
     }
 
     // 1. Active skips — green, draggable, with contact + collect button
@@ -330,20 +364,25 @@ export function MapTab() {
           const phone = skip.customer_phone
             ? `<a href="tel:${skip.customer_phone}" style="color:#2563eb;">${skip.customer_phone}</a>`
             : '—'
+          const dirHref = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
           const html = `
-            <div style="font-family:sans-serif;min-width:210px;color:#0f172a;">
+            <div style="font-family:system-ui,sans-serif;min-width:230px;color:#0f172a;font-size:13px;background:#fff;">
               <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:6px;">
-                <b style="color:#059669;text-transform:uppercase;font-size:11px;">${skip.skip_size}yd skip</b>
-                <span style="font-size:10px;background:#ecfdf5;color:#047857;padding:2px 6px;border-radius:4px;font-weight:bold;">${days} days on hire</span>
+                <b style="color:#059669;text-transform:uppercase;font-size:12px;">${skip.skip_size}yd skip</b>
+                <span style="font-size:11px;background:${days > (DEFAULT_CONFIG.demurrageDays || 28) ? '#fffbeb;color:#b45309' : '#ecfdf5;color:#047857'};padding:2px 6px;border-radius:4px;font-weight:bold;">${days} days on hire</span>
               </div>
               <b style="font-size:14px;display:block;">${skip.customer_name || 'Unknown customer'}</b>
-              <div style="font-size:12px;color:#475569;margin-top:2px;">📞 ${phone}</div>
-              <div style="font-size:12px;color:#475569;margin-top:2px;">📍 ${skip.delivery_address || 'No address'}</div>
-              <div style="font-size:11px;color:#64748b;margin-top:4px;">Skip ID: <b>${skip.skip_id}</b> · Dropped ${skip.delivery_date ? new Date(skip.delivery_date).toLocaleDateString() : '—'}</div>
-              ${skip.comments ? `<div style="margin-top:6px;font-size:11px;background:#f1f5f9;padding:6px;border-radius:4px;">${skip.comments}</div>` : ''}
-              <button id="collect-${skip.id}" style="margin-top:10px;width:100%;background:#f59e0b;color:#1e293b;border:none;padding:7px;border-radius:6px;font-weight:bold;font-size:11px;cursor:pointer;">Mark collected</button>
+              <div style="color:#475569;margin-top:2px;">📞 ${phone}</div>
+              <div style="color:#475569;margin-top:2px;">📍 ${skip.delivery_address || 'No address'}</div>
+              <div style="font-size:12px;color:#64748b;margin-top:4px;">Skip ID: <b>${skip.skip_id}</b> · Dropped ${skip.delivery_date ? new Date(skip.delivery_date).toLocaleDateString() : '—'}</div>
+              ${skip.comments ? `<div style="margin-top:6px;font-size:12px;background:#f1f5f9;padding:6px;border-radius:4px;">${skip.comments}</div>` : ''}
+              <div style="display:flex;gap:6px;margin-top:10px;">
+                <button id="collect-${skip.id}" style="flex:1;background:#f59e0b;color:#1e293b;border:none;padding:8px 6px;border-radius:6px;font-weight:bold;font-size:12px;cursor:pointer;">Mark collected</button>
+                <a href="${dirHref}" target="_blank" rel="noopener" style="flex:1;display:flex;align-items:center;justify-content:center;background:#2563eb;color:#fff;padding:8px 6px;border-radius:6px;font-weight:bold;font-size:12px;text-decoration:none;">Directions</a>
+                ${skip.customer_phone ? `<a href="tel:${skip.customer_phone}" style="display:flex;align-items:center;justify-content:center;background:#059669;color:#fff;padding:8px 10px;border-radius:6px;font-weight:bold;font-size:12px;text-decoration:none;">Call</a>` : ''}
+              </div>
             </div>`
-          openInfo(marker, html, () => {
+          const open = openInfo(marker, html, () => {
             const btn = document.getElementById(`collect-${skip.id}`)
             if (btn)
               btn.onclick = async () => {
@@ -357,6 +396,7 @@ export function MapTab() {
                 }
               }
           })
+          markerByIdRef.current[skip.id] = { marker, open }
           addClustered(skipMarkers, marker, lat, lng)
         })
     }
@@ -376,15 +416,17 @@ export function MapTab() {
           }),
           title: `${o.job_type} — ${o.customer_name}`,
         })
-        openInfo(
+        const orderOpen = openInfo(
           marker,
-          `<div style="font-family:sans-serif;min-width:200px;color:#0f172a;">
-             <b style="color:${isCollection ? '#d97706' : '#2563eb'};text-transform:uppercase;font-size:11px;">${o.job_type} today</b>
+          `<div style="font-family:system-ui,sans-serif;min-width:210px;color:#0f172a;font-size:13px;background:#fff;">
+             <b style="color:${isCollection ? '#d97706' : '#2563eb'};text-transform:uppercase;font-size:12px;">${o.job_type} today</b>
              <b style="font-size:14px;display:block;margin-top:4px;">${o.customer_name}</b>
-             <div style="font-size:12px;color:#475569;">📍 ${o.address}</div>
-             <div style="font-size:11px;color:#64748b;margin-top:4px;">Driver: <b>${o.driver_name || 'Unassigned'}</b> · ${o.skip_size}yd</div>
+             <div style="color:#475569;">📍 ${o.address}</div>
+             <div style="font-size:12px;color:#64748b;margin-top:4px;">Driver: <b>${o.driver_name || 'Unassigned'}</b> · ${o.skip_size}yd</div>
+             <a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;margin-top:10px;background:#2563eb;color:#fff;padding:8px 6px;border-radius:6px;font-weight:bold;font-size:12px;text-decoration:none;">Get directions</a>
            </div>`
         )
+        markerByIdRef.current[o.id] = { marker, open: orderOpen }
         add(marker, lat, lng)
       })
     }
@@ -525,7 +567,7 @@ export function MapTab() {
             }`}
           >
             {isVisible ? '● ' : '○ '}
-            {name}
+            {name} · {layerCount(name)}
           </button>
         ))}
       </div>
@@ -629,32 +671,40 @@ export function MapTab() {
             Skips on site ({skips.length})
           </h3>
           {skips.map((skip) => (
-            <div key={skip.id} className="bg-slate-900 border border-white/5 rounded-xl p-3">
+            <button
+              key={skip.id}
+              onClick={() => focusPin(skip.id)}
+              className="w-full text-left bg-slate-900 border border-white/5 hover:border-primary/40 rounded-xl p-3 transition-colors"
+            >
               <div className="flex justify-between items-center mb-1">
-                <span className="text-[9px] font-black bg-emerald-500/10 text-emerald-500 uppercase px-1.5 py-0.5 rounded">
+                <span className="text-[11px] font-black bg-emerald-500/10 text-emerald-500 uppercase px-1.5 py-0.5 rounded">
                   {skip.skip_size}yd
                 </span>
-                <span className="text-[8px] font-bold text-slate-600 italic">{skip.skip_id}</span>
+                <span className="text-[11px] font-bold text-slate-500">{skip.skip_id}</span>
               </div>
               <p className="font-bold text-white text-xs truncate">{skip.customer_name || 'Unknown'}</p>
-              <p className="text-[9px] text-slate-500 truncate mt-0.5">🏗️ {skip.delivery_address || 'No address'}</p>
-            </div>
+              <p className="text-[11px] text-slate-400 truncate mt-0.5">🏗️ {skip.delivery_address || 'No address'}</p>
+            </button>
           ))}
           {liveOrders.map((o) => (
-            <div key={o.id} className="bg-slate-900 border border-white/5 rounded-xl p-3">
+            <button
+              key={o.id}
+              onClick={() => focusPin(o.id)}
+              className="w-full text-left bg-slate-900 border border-white/5 hover:border-primary/40 rounded-xl p-3 transition-colors"
+            >
               <div className="flex justify-between items-center mb-1">
                 <span
-                  className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
+                  className={`text-[11px] font-black uppercase px-1.5 py-0.5 rounded ${
                     o.job_type === 'Collection' ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500'
                   }`}
                 >
                   {o.job_type}
                 </span>
-                <span className="text-[8px] font-bold text-slate-600 italic">{o.status}</span>
+                <span className="text-[11px] font-bold text-slate-500">{o.status}</span>
               </div>
               <p className="font-bold text-white text-xs truncate">{o.customer_name}</p>
-              <p className="text-[9px] text-slate-500 truncate mt-0.5">📍 {o.address}</p>
-            </div>
+              <p className="text-[11px] text-slate-400 truncate mt-0.5">📍 {o.address}</p>
+            </button>
           ))}
         </div>
       </div>
