@@ -65,7 +65,10 @@ from the map tab.
 Columns for P3.1 reference: id, created_at, skip_id, location, permit_number, date_applied,
 date_issued, expiry_date, status, tenant_id.
 
-> **Status note:** P0.1–P0.3 were fixed by the orchestrator on 2026-06-09 — start at Phase 1.
+> **Status note:** P0.1–P0.3 fixed 2026-06-09 (commit b5015f0; view migration applied to live).
+> Phase 1 (P1.1–P1.6) completed 2026-06-09 — map needs a visual smoke test on the live deploy
+> before Phase 2 starts (advanced markers require the marker library + vector mapId; check
+> pins, clustering, drag-to-move, search, info-window buttons).
 
 ---
 
