@@ -182,7 +182,7 @@ export function WeighbridgeTab() {
           <span className="font-bold">✅ Ticket {result.ticketNumber} — {net.toLocaleString()} kg net</span>
           <div className="flex gap-2">
             <button onClick={() => { window.open(`/api/documents?type=WTN&ticketNumber=${result.ticketNumber}`, '_blank'); toast.dismiss(t.id) }}
-              className="bg-emerald-500 text-white px-3 py-1.5 rounded text-[10px] font-black uppercase hover:bg-emerald-600">
+              className="bg-emerald-500 text-white px-3 py-1.5 rounded text-xs font-black uppercase hover:bg-emerald-600">
               🖨️ Print Ticket
             </button>
             {wlId && (
@@ -194,7 +194,7 @@ export function WeighbridgeTab() {
                   setWtnGenerating(null); toast.dismiss(t.id)
                 }}
                 disabled={wtnGenerating === wlId}
-                className="bg-blue-600 text-white px-3 py-1.5 rounded text-[10px] font-black uppercase hover:bg-blue-500 disabled:opacity-50">
+                className="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-black uppercase hover:bg-blue-500 disabled:opacity-50">
                 {wtnGenerating === wlId ? '…' : '📄 WTN'}
               </button>
             )}
@@ -240,7 +240,7 @@ export function WeighbridgeTab() {
       {/* Queue strip — trucks parked mid-tip */}
       {queued.length > 0 && (
         <div className="bg-slate-900 border border-white/5 rounded-xl p-4">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Trucks tipping on site ({queued.length}) — click to load when back on scale</p>
+          <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Trucks tipping on site ({queued.length}) — click to load when back on scale</p>
           <div className="flex flex-wrap gap-2">
             {queued.map(t => {
               const mins = Math.floor((Date.now() - new Date(t.timestamp).getTime()) / 60000)
@@ -248,7 +248,7 @@ export function WeighbridgeTab() {
                 <button key={t.id} onClick={() => loadQueued(t)}
                   className="flex items-center gap-2 bg-slate-800 hover:bg-primary hover:text-slate-900 border border-white/5 hover:border-primary rounded-lg px-3 py-2 transition-all group">
                   <span className="font-black text-sm text-white group-hover:text-slate-900">{t.reg || t.customer_name}</span>
-                  <span className={`text-[9px] font-black uppercase ${mins >= 20 ? 'text-red-400' : 'text-yellow-400'} group-hover:text-slate-700`}>{mins}m</span>
+                  <span className={`text-xs font-black uppercase ${mins >= 20 ? 'text-red-400' : 'text-yellow-400'} group-hover:text-slate-700`}>{mins}m</span>
                 </button>
               )
             })}
@@ -260,7 +260,7 @@ export function WeighbridgeTab() {
       <div className="bg-slate-900 border border-white/5 rounded-xl p-6 space-y-4">
         <div className="flex justify-between items-center">
           <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500">Weighbridge</h3>
-          <button onClick={reset} className="text-[10px] font-black text-slate-600 hover:text-red-400 uppercase tracking-widest transition-colors flex items-center gap-1">
+          <button onClick={reset} className="text-xs font-black text-slate-600 hover:text-red-400 uppercase tracking-widest transition-colors flex items-center gap-1">
             <X size={10} /> Clear
           </button>
         </div>
@@ -276,7 +276,7 @@ export function WeighbridgeTab() {
               placeholder="SN68 VYL, van reg, trailer…"
               className={`flex-1 bg-slate-800 border ${!form.lorryReg ? 'border-amber-500/40' : 'border-white/10'} text-white px-3 py-2.5 rounded text-sm font-mono focus:border-primary outline-none uppercase`} />
             <select onChange={e => { if (e.target.value) handleRegChange(e.target.value) }}
-              className="w-24 bg-slate-800 border border-white/10 text-white px-2 py-2 rounded text-[10px] font-bold uppercase">
+              className="w-24 bg-slate-800 border border-white/10 text-white px-2 py-2 rounded text-xs font-bold uppercase">
               <option value="">Fleet</option>
               {lorries.map((l: any) => <option key={l.registration} value={l.registration}>{l.registration}</option>)}
             </select>
@@ -298,7 +298,7 @@ export function WeighbridgeTab() {
                 <button key={c.id} onClick={() => selectCustomer(c)}
                   className="w-full text-left px-4 py-2.5 hover:bg-primary hover:text-slate-900 text-sm text-white flex justify-between border-b border-white/5 transition-all">
                   <span className="font-black">{c.name}</span>
-                  <span className="text-[10px] opacity-50">{c.phone}</span>
+                  <span className="text-xs opacity-50">{c.phone}</span>
                 </button>
               ))}
             </div>
@@ -340,7 +340,7 @@ export function WeighbridgeTab() {
             <div className="grid grid-cols-2 gap-1.5">
               {[{ val: 'On-site', label: '↓ IN' }, { val: 'Off-site', label: '↑ OUT' }].map(d => (
                 <button key={d.val} type="button" onClick={() => set('direction', d.val)}
-                  className={`py-2.5 rounded text-[10px] font-black transition-all ${form.direction === d.val
+                  className={`py-2.5 rounded text-xs font-black transition-all ${form.direction === d.val
                     ? d.val === 'On-site' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
                     : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
                   {d.label}
@@ -358,15 +358,15 @@ export function WeighbridgeTab() {
           <div className={`${hasGross ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-slate-800/40 border-white/10'} border rounded-lg p-3 transition-all`}>
             <div className="flex justify-between items-center mb-2">
               <div>
-                <p className={`text-[10px] font-black uppercase tracking-widest ${hasGross ? 'text-emerald-400' : 'text-slate-500'}`}>
+                <p className={`text-[11px] font-black uppercase tracking-widest ${hasGross ? 'text-emerald-400' : 'text-slate-500'}`}>
                   {hasSotredTare ? 'Gross Weight (kg)' : '① Incoming — vehicle LOADED'}
                 </p>
                 {!hasSotredTare && !hasGross && (
-                  <p className="text-[9px] text-slate-600 mt-0.5">Capture when vehicle arrives on scale</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Capture when vehicle arrives on scale</p>
                 )}
               </div>
               <button onClick={() => captureScale('grossWeight')}
-                className="text-[9px] font-black text-primary uppercase hover:underline whitespace-nowrap">
+                className="text-xs font-black text-primary uppercase hover:underline whitespace-nowrap">
                 ⚡ Capture
               </button>
             </div>
@@ -380,15 +380,15 @@ export function WeighbridgeTab() {
             <div className={`${hasTare ? 'bg-blue-900/20 border-blue-500/30' : 'bg-slate-800/40 border-white/10'} border rounded-lg p-3 transition-all`}>
               <div className="flex justify-between items-center mb-2">
                 <div>
-                  <p className={`text-[10px] font-black uppercase tracking-widest ${hasTare ? 'text-blue-400' : 'text-slate-500'}`}>
+                  <p className={`text-[11px] font-black uppercase tracking-widest ${hasTare ? 'text-blue-400' : 'text-slate-500'}`}>
                     ② Outgoing — vehicle EMPTY
                   </p>
                   {!hasTare && (
-                    <p className="text-[9px] text-slate-600 mt-0.5">Capture when vehicle returns from tipping</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Capture when vehicle returns from tipping</p>
                   )}
                 </div>
                 <button onClick={() => captureScale('tareWeight')}
-                  className="text-[9px] font-black text-primary uppercase hover:underline whitespace-nowrap">
+                  className="text-xs font-black text-primary uppercase hover:underline whitespace-nowrap">
                   ⚡ Capture
                 </button>
               </div>
@@ -401,22 +401,22 @@ export function WeighbridgeTab() {
 
         {/* Tare status message */}
         {tareMsg && (
-          <p className={`text-[10px] font-bold ${hasSotredTare ? 'text-emerald-400' : 'text-amber-400'}`}>{tareMsg}</p>
+          <p className={`text-xs font-bold ${hasSotredTare ? 'text-emerald-400' : 'text-amber-400'}`}>{tareMsg}</p>
         )}
 
         {/* Net weight + cost — live */}
         {readyToProcess && (
           <div className="bg-slate-800/60 border border-white/5 rounded-lg px-4 py-3 flex justify-between items-center">
             <div>
-              <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest">Net Weight</p>
+              <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Net Weight</p>
               <p className="text-xl font-black text-white">{net.toLocaleString()} <span className="text-xs">kg</span></p>
             </div>
             <div>
-              <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest">Tonnage</p>
+              <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Tonnage</p>
               <p className="text-xl font-black text-slate-300">{(net / 1000).toFixed(3)} t</p>
             </div>
             <div className="text-right">
-              <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest">Cost</p>
+              <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Cost</p>
               <p className="text-xl font-black text-primary">£{effectivePrice.toFixed(2)}</p>
             </div>
           </div>
@@ -456,7 +456,7 @@ export function WeighbridgeTab() {
             placeholder="Notes (optional)…"
             className="w-full bg-slate-800 border border-white/10 text-white px-3 py-2 rounded text-sm focus:border-primary outline-none text-slate-300 placeholder:text-slate-600" />
           <div className="flex items-center gap-2">
-            <span className="text-[9px] text-slate-600 font-black uppercase tracking-widest whitespace-nowrap">Price override £</span>
+            <span className="text-[10px] text-slate-600 font-black uppercase tracking-widest whitespace-nowrap">Price override £</span>
             <input type="number" value={manualPrice} onChange={e => setManualPrice(e.target.value)}
               placeholder="Auto"
               className="w-28 bg-slate-800 border border-white/10 text-white px-3 py-1.5 rounded text-sm focus:border-primary outline-none" />
@@ -482,7 +482,7 @@ export function WeighbridgeTab() {
           {/* If gross captured and they want to park manually */}
           {hasGross && !readyToProcess && hasSotredTare === false && (
             <button onClick={parkWhileTipping}
-              className="w-full py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-400 transition-colors">
+              className="w-full py-2 text-xs font-black uppercase tracking-widest text-slate-600 hover:text-slate-400 transition-colors">
               or park in queue while tipping →
             </button>
           )}
