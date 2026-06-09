@@ -13,7 +13,7 @@ import {
   moveSkipLocationAction,
   collectSkipFromMapAction,
 } from '@/app/actions/operations'
-import { getMapDataAction } from '@/app/actions/office-data'
+import { getMapDataAction, searchCustomersAction } from '@/app/actions/office-data'
 
 const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 const EDINBURGH = { lat: 55.9533, lng: -3.1883 }
@@ -59,11 +59,90 @@ type PlaceForm = {
   lat: number
   lng: number
   skipSize: string
+  skipId: string
   customerName: string
   customerPhone: string
   address: string
   comments: string
   saving: boolean
+}
+
+/** Debounced existing-customer picker; free text stays valid for one-offs. */
+function CustomerPicker({
+  value,
+  onChange,
+  onPick,
+}: {
+  value: string
+  onChange: (name: string) => void
+  onPick: (c: { name: string; phone: string | null }) => void
+}) {
+  const [suggestions, setSuggestions] = useState<any[]>([])
+  const [open, setOpen] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [])
+
+  function handleInput(v: string) {
+    onChange(v)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (v.trim().length < 2) {
+      setSuggestions([])
+      setOpen(false)
+      return
+    }
+    timerRef.current = setTimeout(async () => {
+      try {
+        const results = await searchCustomersAction(v)
+        setSuggestions(results)
+        setOpen(results.length > 0)
+      } catch {
+        setSuggestions([])
+        setOpen(false)
+      }
+    }, 280)
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <input
+        value={value}
+        onChange={(e) => handleInput(e.target.value)}
+        onFocus={() => suggestions.length > 0 && setOpen(true)}
+        placeholder="Customer name"
+        autoComplete="off"
+        className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500"
+      />
+      {open && suggestions.length > 0 && (
+        <ul className="absolute z-50 w-full mt-1 bg-slate-800 border border-white/20 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+          {suggestions.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setOpen(false)
+                  setSuggestions([])
+                  onPick({ name: c.name, phone: c.phone })
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-white hover:bg-primary hover:text-slate-900 border-b border-white/5 last:border-0"
+              >
+                {c.name}
+                {c.phone && <span className="text-xs text-slate-400 ml-2">{c.phone}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 export function MapTab() {
@@ -167,6 +246,7 @@ export function MapTab() {
         lat: e.latLng.lat(),
         lng: e.latLng.lng(),
         skipSize: '8',
+        skipId: '',
         customerName: '',
         customerPhone: '',
         address: '',
@@ -378,6 +458,7 @@ export function MapTab() {
     try {
       const res = await placeSkipOnMapAction({
         skipSize: placeForm.skipSize,
+        skipId: placeForm.skipId.trim() || undefined,
         customerName: placeForm.customerName,
         customerPhone: placeForm.customerPhone,
         address: placeForm.address,
@@ -466,6 +547,7 @@ export function MapTab() {
                   lat,
                   lng,
                   skipSize: '8',
+                  skipId: '',
                   customerName: '',
                   customerPhone: '',
                   address,
@@ -497,11 +579,14 @@ export function MapTab() {
                   </option>
                 ))}
               </select>
-              <input
+              <CustomerPicker
                 value={placeForm.customerName}
-                onChange={(e) => setPlaceForm({ ...placeForm, customerName: e.target.value })}
-                placeholder="Customer name"
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500"
+                onChange={(name) => setPlaceForm((f) => (f ? { ...f, customerName: name } : f))}
+                onPick={({ name, phone }) =>
+                  setPlaceForm((f) =>
+                    f ? { ...f, customerName: name, customerPhone: f.customerPhone || phone || '' } : f
+                  )
+                }
               />
               <input
                 value={placeForm.customerPhone}
@@ -509,10 +594,20 @@ export function MapTab() {
                 placeholder="Contact number"
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500"
               />
-              <input
+              <AddressAutocomplete
                 value={placeForm.address}
-                onChange={(e) => setPlaceForm({ ...placeForm, address: e.target.value })}
+                onChange={(address) => setPlaceForm((f) => (f ? { ...f, address } : f))}
+                onResolved={({ address }) =>
+                  // Keep the clicked lat/lng — only adopt the formatted address.
+                  setPlaceForm((f) => (f ? { ...f, address } : f))
+                }
                 placeholder="Address / notes for location"
+                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500"
+              />
+              <input
+                value={placeForm.skipId}
+                onChange={(e) => setPlaceForm({ ...placeForm, skipId: e.target.value })}
+                placeholder="Skip ID (optional — reuse existing)"
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500"
               />
               <p className="text-[10px] text-slate-500">
