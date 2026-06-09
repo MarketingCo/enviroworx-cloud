@@ -12,7 +12,7 @@ import { updateDriverPinAction } from '@/app/actions/operations'
 import { logFleetIssueAction, resolveFleetIssueAction,
   listCarrierLicencesAction, upsertCarrierLicenceAction, deleteCarrierLicenceAction } from '@/app/actions/office-data'
 
-import { SectionHeader, Badge } from './shared'
+import { SectionHeader, Badge, Button, EmptyState } from './shared'
 
 export function FleetTab() {
   const [lorries, setLorries] = useState<any[]>([])
@@ -21,16 +21,22 @@ export function FleetTab() {
   const [showLogIssue, setShowLogIssue] = useState(false)
   const [issueForm, setIssueForm] = useState({ lorry_reg: '', issue_type: 'Mechanical', description: '', reported_by: '' })
   const [savingIssue, setSavingIssue] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function load() {
-    const [lorryData, driverData, { data: issueData }] = await Promise.all([
-      getLorries(),
-      getDriversList(),
-      supabase.from('fleet_logs').select('*').eq('status', 'Open').order('created_at', { ascending: false }),
-    ])
-    setLorries(lorryData)
-    setDrivers(driverData)
-    setIssues(issueData ?? [])
+    setError(null)
+    try {
+      const [lorryData, driverData, { data: issueData }] = await Promise.all([
+        getLorries(),
+        getDriversList(),
+        supabase.from('fleet_logs').select('*').eq('status', 'Open').order('created_at', { ascending: false }),
+      ])
+      setLorries(lorryData)
+      setDrivers(driverData)
+      setIssues(issueData ?? [])
+    } catch (e: any) {
+      setError(e?.message || 'Could not load fleet data')
+    }
   }
 
   useEffect(() => { load() }, [])
@@ -88,6 +94,15 @@ export function FleetTab() {
     const tax = motDays(l.tax_due)
     return (mot !== null && mot < 30) || (tax !== null && tax < 30)
   })
+
+  if (error)
+    return (
+      <EmptyState
+        icon={<AlertTriangle size={32} className="opacity-40" />}
+        message={error}
+        action={<Button variant="secondary" onClick={load}>Retry</Button>}
+      />
+    )
 
   return (
     <div className="space-y-6">

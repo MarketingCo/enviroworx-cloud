@@ -9,24 +9,31 @@ import { getDispatchJobsAction as getDispatchJobs } from '@/app/actions/office-d
 import { assignDriverToJobAction, autoAssignJobsAction, cancelBookingAction } from '@/app/actions/operations'
 import { syncOrderToQuickBooks } from '@/app/actions/quickbooks'
 
-import { fmt, today, tomorrow, SectionHeader, Badge, statusColor } from './shared'
+import { fmt, today, tomorrow, SectionHeader, Badge, statusColor, Button, EmptyState } from './shared'
 
 export function DispatchTab() {
   const [jobs, setJobs] = useState<any[]>([])
   const [drivers, setDrivers] = useState<any[]>([])
   const [dispatchDate, setDispatchDate] = useState(tomorrow())
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<'time' | 'area'>('time')
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [jobData, { data: driverData }] = await Promise.all([
-      getDispatchJobs(dispatchDate),
-      supabase.from('drivers').select('*').eq('status', 'Available').order('name'),
-    ])
-    setJobs(jobData)
-    setDrivers(driverData ?? [])
-    setLoading(false)
+    setError(null)
+    try {
+      const [jobData, { data: driverData }] = await Promise.all([
+        getDispatchJobs(dispatchDate),
+        supabase.from('drivers').select('*').eq('status', 'Available').order('name'),
+      ])
+      setJobs(jobData)
+      setDrivers(driverData ?? [])
+    } catch (e: any) {
+      setError(e?.message || 'Could not load dispatch jobs')
+    } finally {
+      setLoading(false)
+    }
   }, [dispatchDate])
 
   useEffect(() => { load() }, [load])
@@ -113,7 +120,15 @@ export function DispatchTab() {
 
       {loading && <p className="text-slate-500 text-sm">Loading jobs...</p>}
 
-      {!loading && jobs.length === 0 && (
+      {!loading && error && (
+        <EmptyState
+          icon={<Truck size={32} className="opacity-30" />}
+          message={error}
+          action={<Button variant="secondary" onClick={load}>Retry</Button>}
+        />
+      )}
+
+      {!loading && !error && jobs.length === 0 && (
         <div className="text-center py-16 text-slate-500">
           <Truck size={32} className="mx-auto mb-3 opacity-30" />
           <p className="font-bold">No jobs for {dispatchDate}</p>

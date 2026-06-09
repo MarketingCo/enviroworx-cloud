@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase-browser'
 import { DEFAULT_CONFIG } from '@/lib/config'
 import toast from 'react-hot-toast'
 import { getInventoryAction } from '@/app/actions/office-data'
-import { SectionHeader } from './shared'
+import { SectionHeader, Button, EmptyState } from './shared'
 
 export function InventoryTab() {
   const [inventory, setInventory] = useState<any[]>([])
@@ -13,17 +13,20 @@ export function InventoryTab() {
   const [sizeFilter, setSizeFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  async function load() {
+    setError(null)
+    try {
+      const data = await getInventoryAction()
+      setInventory(data)
+    } catch (e: any) {
+      setError(e?.message || 'Could not load inventory')
+    }
+    setLoading(false)
+  }
 
   useEffect(() => {
-    async function load() {
-      try {
-        const data = await getInventoryAction()
-        setInventory(data)
-      } catch (e: any) {
-        toast.error(e.message || 'Could not load inventory')
-      }
-      setLoading(false)
-    }
     load()
     const ch = supabase.channel('inv').on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => {
       load()
@@ -62,6 +65,14 @@ export function InventoryTab() {
     if (!dateStr) return null
     return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
   }
+
+  if (error)
+    return (
+      <EmptyState
+        message={error}
+        action={<Button variant="secondary" onClick={() => { setLoading(true); load() }}>Retry</Button>}
+      />
+    )
 
   return (
     <div className="space-y-5">
