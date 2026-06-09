@@ -635,6 +635,22 @@ export async function deleteCarrierLicenceAction(id: string) {
 // TENANT-SCOPED READS (replace the old client-side lib/api.ts)
 // ============================================================
 
+/** Latest weighbridge reading (≤2 min old) — fallback for the capture
+ *  buttons when the realtime INSERT event was missed. */
+export async function getLatestScaleReadingAction() {
+  const session = await assertOffice()
+  const cutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString()
+  const { data } = await supabaseAdmin
+    .from('weighbridge_readings')
+    .select('weight_kg, timestamp')
+    .eq('tenant_id', session.tenantId)
+    .gte('timestamp', cutoff)
+    .order('timestamp', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return data?.weight_kg ?? null
+}
+
 /** All pin layers for the office Skip Map, tenant-scoped. */
 export async function getMapDataAction() {
   const session = await assertOffice()

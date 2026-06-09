@@ -6,7 +6,7 @@ import { DEFAULT_CONFIG, WB_SIZES } from '@/lib/config'
 import toast from 'react-hot-toast'
 import { Weight, X } from 'lucide-react'
 import { getStoredTareAction as getStoredTare } from '@/app/actions/office-data'
-import { searchCustomersAction, getEwcCodesAction, generateWtnAction } from '@/app/actions/office-data'
+import { searchCustomersAction, getEwcCodesAction, generateWtnAction, getLatestScaleReadingAction } from '@/app/actions/office-data'
 import { logActiveTipperAction, processWeightLogAction } from '@/app/actions/operations'
 import { SectionHeader } from './shared'
 
@@ -112,12 +112,19 @@ export function WeighbridgeTab() {
     }
   }
 
-  function captureScale(field: 'grossWeight' | 'tareWeight') {
-    if (liveWeight !== null) {
-      set(field, String(liveWeight))
-      toast.success(`Captured ${liveWeight.toLocaleString()} kg`)
+  async function captureScale(field: 'grossWeight' | 'tareWeight') {
+    let weight = liveWeight
+    if (weight === null) {
+      // Realtime event may have been missed — ask the server for the
+      // latest reading from the last 2 minutes.
+      weight = await getLatestScaleReadingAction().catch(() => null)
+      if (weight !== null) setLiveWeight(weight)
+    }
+    if (weight !== null) {
+      set(field, String(weight))
+      toast.success(`Captured ${weight.toLocaleString()} kg`)
     } else {
-      toast.error('No live weight on scale')
+      toast.error('No recent weight from the scale — is the yard monitor running?')
     }
   }
 
