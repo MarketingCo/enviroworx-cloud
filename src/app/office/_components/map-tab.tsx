@@ -532,8 +532,21 @@ export function MapTab() {
 
   if (loading)
     return (
-      <div className="p-10 text-center text-slate-500 font-black uppercase tracking-widest animate-pulse">
-        Loading map…
+      <div className="space-y-4">
+        <div className="h-7 w-40 bg-slate-800/60 rounded animate-pulse" />
+        <div className="flex gap-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-7 w-28 bg-slate-800/60 rounded-full animate-pulse" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          <div className="lg:col-span-3 h-[70vh] min-h-[420px] bg-slate-800/40 rounded-2xl animate-pulse" />
+          <div className="space-y-2">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-20 bg-slate-800/40 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        </div>
       </div>
     )
 
@@ -572,8 +585,8 @@ export function MapTab() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4" style={{ height: '650px' }}>
-        <div className="lg:col-span-3 bg-slate-900 rounded-2xl overflow-hidden relative border border-white/5 shadow-2xl">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div className="lg:col-span-3 h-[70vh] min-h-[420px] bg-slate-900 rounded-2xl overflow-hidden relative border border-white/5 shadow-2xl">
           <div id="office-map-canvas" className="w-full h-full" />
 
           <div className="absolute top-4 left-4 z-10 w-72">
@@ -666,7 +679,7 @@ export function MapTab() {
           )}
         </div>
 
-        <div className="space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+        <div className="space-y-2 overflow-y-auto pr-1 custom-scrollbar max-h-[40vh] lg:max-h-none lg:h-[70vh]">
           <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">
             Skips on site ({skips.length})
           </h3>
