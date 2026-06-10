@@ -98,3 +98,79 @@ export async function submitPortalBookingRequest(form: {
   if (error) throw error
   return { success: true }
 }
+
+// ── Active hires + collection requests (P3.5) ───────────────────────────
+
+export async function loadPortalActiveHires() {
+  const session = await requirePortalSession()
+  const { data } = await supabaseAdmin
+    .from('inventory')
+    .select('id, skip_id, skip_size, delivery_address, delivery_date, status')
+    .eq('tenant_id', session.tenantId)
+    .ilike('customer_name', session.name)
+    .in('status', ['In Use', 'Delivered'])
+    .order('delivery_date', { ascending: true })
+  return data ?? []
+}
+
+export async function requestCollectionAction(inventoryId: string) {
+  const session = await requirePortalSession()
+
+  // Re-read the hire server-side so the order is built from our data,
+  // not client-supplied fields.
+  const { data: hire } = await supabaseAdmin
+    .from('inventory')
+    .select('skip_id, skip_size, delivery_address')
+    .eq('tenant_id', session.tenantId)
+    .eq('id', inventoryId)
+    .ilike('customer_name', session.name)
+    .in('status', ['In Use', 'Delivered'])
+    .maybeSingle()
+  if (!hire) throw new Error('Hire not found')
+
+  const { data: existing } = await supabaseAdmin
+    .from('orders')
+    .select('id')
+    .eq('tenant_id', session.tenantId)
+    .eq('job_type', 'Collection')
+    .in('status', ['Booked', 'Assigned'])
+    .eq('skip_id_used', hire.skip_id)
+    .limit(1)
+  if (existing?.length) throw new Error('A collection for this skip is already booked')
+
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const date = tomorrow.toISOString().split('T')[0]
+
+  const { data: cust } = await supabaseAdmin
+    .from('customers')
+    .select('phone')
+    .eq('tenant_id', session.tenantId)
+    .eq('id', session.sub)
+    .maybeSingle()
+
+  const { error } = await supabaseAdmin.from('orders').insert({
+    tenant_id: session.tenantId,
+    date,
+    status: 'Booked' as any,
+    job_type: 'Collection' as any,
+    skip_size: hire.skip_size,
+    skip_id_used: hire.skip_id,
+    address: hire.delivery_address || '',
+    customer_id: session.sub,
+    customer_name: session.name,
+    phone: cust?.phone || '',
+    payment_method: 'Invoice' as any,
+    delivery_comments: `[Portal Request] Collect skip ${hire.skip_id}`,
+  } as any)
+  if (error) throw error
+
+  const { safeActivityLog } = await import('@/lib/supabase')
+  await safeActivityLog({
+    type: 'portal.collection_request',
+    message: `${session.name} requested collection of skip ${hire.skip_id}`,
+    status: 'Completed',
+    entityType: 'order',
+  })
+  return { success: true, date }
+}

@@ -54,6 +54,8 @@ export default function CustomerPortal() {
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [orders, setOrders] = useState<OrderRow[]>([])
   const [cashLogs, setCashLogs] = useState<CashLogRow[]>([])
+  const [activeHires, setActiveHires] = useState<any[]>([])
+  const [collecting, setCollecting] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<'overview' | 'orders' | 'tips' | 'request' | 'details'>('overview')
   const [payLoading, setPayLoading] = useState(false)
@@ -92,19 +94,21 @@ export default function CustomerPortal() {
       return
     }
 
-    const { loadPortalCustomer, loadPortalOrders, loadPortalCashLogs } = await import('@/app/actions/portal')
+    const { loadPortalCustomer, loadPortalOrders, loadPortalCashLogs, loadPortalActiveHires } = await import('@/app/actions/portal')
     const data = await loadPortalCustomer(auth.customer.id)
 
     setCustomer(data as Customer)
     setEditPhone(data.phone || '')
     setEditEmail(data.email || '')
     setEditAddress(data.shipping_address || '')
-    const [orderRows, cashRows] = await Promise.all([
+    const [orderRows, cashRows, hireRows] = await Promise.all([
       loadPortalOrders(data.name),
       loadPortalCashLogs(data.name),
+      loadPortalActiveHires().catch(() => []),
     ])
     setOrders(orderRows as OrderRow[])
     setCashLogs(cashRows as CashLogRow[])
+    setActiveHires(hireRows)
     setScreen('dashboard')
     setLoading(false)
   }
@@ -349,6 +353,50 @@ export default function CustomerPortal() {
         {/* OVERVIEW TAB */}
         {tab === 'overview' && (
           <div className="space-y-6">
+            {/* Active hires — request collection */}
+            {activeHires.length > 0 && (
+              <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
+                <h3 className="text-lg font-bold mb-1">Skips on your site ({activeHires.length})</h3>
+                <p className="text-slate-400 text-sm mb-4">Finished with one? Request a collection and we&apos;ll book it in.</p>
+                <div className="space-y-3">
+                  {activeHires.map((h) => {
+                    const days = h.delivery_date
+                      ? Math.floor((Date.now() - new Date(h.delivery_date).getTime()) / 86400000)
+                      : null
+                    return (
+                      <div key={h.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-900/60 border border-slate-700 rounded-lg p-4">
+                        <div>
+                          <p className="font-bold">
+                            {h.skip_size}yd skip <span className="text-slate-500 font-normal">· {h.skip_id}</span>
+                          </p>
+                          <p className="text-sm text-slate-400">
+                            {h.delivery_address || 'No address'} {days !== null && <span className="text-slate-500">· {days} days on site</span>}
+                          </p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Request collection of skip ${h.skip_id}? We aim for the next working day.`)) return
+                            setCollecting(h.id)
+                            try {
+                              const { requestCollectionAction } = await import('@/app/actions/portal')
+                              const res = await requestCollectionAction(h.id)
+                              toast.success(`Collection requested for ${res.date}`)
+                            } catch (e: any) {
+                              toast.error(e?.message || 'Could not request collection')
+                            }
+                            setCollecting(null)
+                          }}
+                          disabled={collecting === h.id}
+                          className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-sm px-4 py-2.5 rounded-lg whitespace-nowrap"
+                        >
+                          {collecting === h.id ? 'Requesting…' : '🚛 Request collection'}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
             {/* Outstanding Payment Banner */}
             {outstanding > 0 && (
               <div className="bg-red-900/30 border border-red-500/40 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
