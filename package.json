@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "migrate": "npx ts-node supabase/seed/migrate_from_sheets.ts",
     "sync-kml": "npx ts-node src/scripts/import-kml.ts",
-    "preflight": "node scripts/preflight-check.mjs"
+    "preflight": "node scripts/preflight-check.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@googlemaps/markerclusterer": "^2.6.2",
@@ -44,6 +45,7 @@
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
     "ts-node": "^10.9.2",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.8"
   }
 }
