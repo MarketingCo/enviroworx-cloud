@@ -7,6 +7,7 @@
  */
 export const dynamic = 'force-dynamic'
 
+import { reportError } from '@/lib/monitor'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { WASTE_CODES, DEFAULT_CONFIG } from '@/lib/config'

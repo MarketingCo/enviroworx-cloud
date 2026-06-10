@@ -1,3 +1,4 @@
+import { reportError } from '@/lib/monitor'
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -27,6 +28,7 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json({ success: true, count: result.count })
   } catch (error: unknown) {
+    reportError('cron:monthly-sepa', error)
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error('SEPA Sheets Cron Error:', error)
     return NextResponse.json({ error: message }, { status: 500 })

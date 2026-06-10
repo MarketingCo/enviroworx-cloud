@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { reportError } from '@/lib/monitor'
 import { verifyCronAuth } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
@@ -96,6 +97,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, updated: telemetryInserts.length })
   } catch (error: any) {
+    reportError('cron:verizon-sync', error)
     console.error('Verizon Sync Cron Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { reportError } from '@/lib/monitor'
 import { verifyCronAuth } from '@/lib/auth'
 import { supabaseAdmin, safeActivityLog } from '@/lib/supabase'
 import { sendSms } from '@/lib/sms'
@@ -117,6 +118,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, remindersSent: sent, overstaySent, permitWarnings })
   } catch (error: any) {
+    reportError('cron:collection-reminders', error)
     console.error('SMS Reminder Cron Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
