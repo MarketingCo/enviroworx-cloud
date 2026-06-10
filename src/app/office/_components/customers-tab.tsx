@@ -13,7 +13,7 @@ import {
   mergeCustomersAction,
 } from '@/app/actions/office-data'
 
-import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
+import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor, Button, EmptyState } from './shared'
 
 export function CustomersTab() {
   const [query, setQuery] = useState('')
@@ -25,23 +25,27 @@ export function CustomersTab() {
     { key: string; customers: { id: string; name: string; phone: string | null }[] }[]
   >([])
   const [mergePrimary, setMergePrimary] = useState<Record<string, string>>({})
+  const [error, setError] = useState<string | null>(null)
+
+  async function loadInitial() {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await listCustomersAction(100)
+      setResults(data)
+      setInitialLoaded(true)
+    } catch (e: any) {
+      setError(e?.message || 'Could not load customers')
+    }
+    setLoading(false)
+  }
 
   useEffect(() => {
-    async function loadInitial() {
-      setLoading(true)
-      try {
-        const data = await listCustomersAction(100)
-        setResults(data)
-        setInitialLoaded(true)
-      } catch (e: any) {
-        toast.error(e.message || 'Could not load customers')
-      }
-      setLoading(false)
-    }
     loadInitial()
     findDuplicateCustomersAction()
       .then(setDuplicates)
       .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function handleMerge(groupKey: string, customers: { id: string; name: string }[]) {
@@ -104,6 +108,11 @@ export function CustomersTab() {
     toast.success('Marked as paid')
     loadTimeline(timeline.customer)
   }
+
+  if (error)
+    return (
+      <EmptyState message={error} action={<Button variant="secondary" onClick={loadInitial}>Retry</Button>} />
+    )
 
   return (
     <div className="space-y-6">

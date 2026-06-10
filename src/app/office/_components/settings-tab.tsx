@@ -9,7 +9,7 @@ import { getCustomPricingListAction as getCustomPricingList } from '@/app/action
 import { updateConfigAction, addCustomPriceAction, deleteCustomPriceAction } from '@/app/actions/operations'
 import { listOfficeStaffAction, getSetupStatusAction } from '@/app/actions/office-data'
 
-import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
+import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor, Button, EmptyState } from './shared'
 
 export function SettingsTab() {
   const [config, setConfig] = useState<any>(null)
@@ -30,20 +30,27 @@ export function SettingsTab() {
     { id: string; label: string; ok: boolean; detail: string }[]
   >([])
 
+  const [error, setError] = useState<string | null>(null)
+
   async function load() {
     setLoading(true)
-    const [{ data }, rates, staff, checks] = await Promise.all([
-      supabase.from('config').select('*'),
-      getCustomPricingList(),
-      listOfficeStaffAction().catch(() => []),
-      getSetupStatusAction().catch(() => []),
-    ])
-    const cfg: any = {}
-    data?.forEach((row: any) => { cfg[row.key] = row.value })
-    setConfig(cfg)
-    setCustomRates(rates)
-    setOfficeStaff(staff as typeof officeStaff)
-    setSetupChecks(checks)
+    setError(null)
+    try {
+      const [{ data }, rates, staff, checks] = await Promise.all([
+        supabase.from('config').select('*'),
+        getCustomPricingList(),
+        listOfficeStaffAction().catch(() => []),
+        getSetupStatusAction().catch(() => []),
+      ])
+      const cfg: any = {}
+      data?.forEach((row: any) => { cfg[row.key] = row.value })
+      setConfig(cfg)
+      setCustomRates(rates)
+      setOfficeStaff(staff as typeof officeStaff)
+      setSetupChecks(checks)
+    } catch (e: any) {
+      setError(e?.message || 'Could not load settings')
+    }
     setLoading(false)
   }
 
@@ -85,6 +92,11 @@ export function SettingsTab() {
   }
 
   if (loading) return <div className="p-10 text-center text-slate-500 font-black uppercase animate-pulse">Loading system settings...</div>
+
+  if (error)
+    return (
+      <EmptyState message={error} action={<Button variant="secondary" onClick={load}>Retry</Button>} />
+    )
 
   return (
     <div className="space-y-10 max-w-6xl animate-in fade-in slide-in-from-bottom-2 duration-500">

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { getAuditLogAction } from '@/app/actions/office-data'
-import { SectionHeader } from './shared'
+import { SectionHeader, Button, EmptyState } from './shared'
 import toast from 'react-hot-toast'
 
 type AuditRow = {
@@ -20,14 +20,16 @@ type AuditRow = {
 export function ActivityTab() {
   const [rows, setRows] = useState<AuditRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
       const data = await getAuditLogAction(100)
       setRows(data as AuditRow[])
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load activity')
+      setError(e instanceof Error ? e.message : 'Failed to load activity')
     }
     setLoading(false)
   }, [])
@@ -35,6 +37,11 @@ export function ActivityTab() {
   useEffect(() => {
     load()
   }, [load])
+
+  if (error)
+    return (
+      <EmptyState message={error} action={<Button variant="secondary" onClick={load}>Retry</Button>} />
+    )
 
   return (
     <div className="space-y-6 max-w-5xl animate-in fade-in duration-300">

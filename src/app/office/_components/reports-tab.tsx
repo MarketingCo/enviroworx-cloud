@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
 import toast from 'react-hot-toast'
@@ -11,7 +11,7 @@ import {
   runMonthlySepaDriveSyncAction,
 } from '@/app/actions/office-data'
 
-import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor } from './shared'
+import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor, Button, EmptyState } from './shared'
 
 export function ReportsTab() {
   const thisMonth = new Date().toISOString().slice(0, 7)
@@ -27,12 +27,21 @@ export function ReportsTab() {
     openJobs: number
     unpaidInvoices: number
   } | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const loadSummary = useCallback(() => {
+    setError(null)
     getOpsSummaryAction(startDate, endDate)
       .then(setSummary)
-      .catch(() => setSummary(null))
+      .catch((e: any) => {
+        setSummary(null)
+        setError(e?.message || 'Could not load summary')
+      })
   }, [startDate, endDate])
+
+  useEffect(() => {
+    loadSummary()
+  }, [loadSummary])
 
   async function handleGenerate(type: string, label: string) {
     setLoading(type)
@@ -79,6 +88,11 @@ export function ReportsTab() {
     { type: 'DRIVER_MANIFEST', label: 'Driver Manifest', desc: 'Completed jobs grouped by driver for payroll and operations review' },
     { type: 'ASSETS', label: 'Asset Report', desc: 'Current skip inventory — skips deployed to customers right now' },
   ]
+
+  if (error)
+    return (
+      <EmptyState message={error} action={<Button variant="secondary" onClick={loadSummary}>Retry</Button>} />
+    )
 
   return (
     <div className="space-y-6 max-w-2xl">

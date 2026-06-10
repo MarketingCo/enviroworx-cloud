@@ -14,6 +14,7 @@ import {
   collectSkipFromMapAction,
 } from '@/app/actions/operations'
 import { getMapDataAction, searchCustomersAction } from '@/app/actions/office-data'
+import { Button, EmptyState } from './shared'
 
 const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 const EDINBURGH = { lat: 55.9533, lng: -3.1883 }
@@ -151,6 +152,7 @@ export function MapTab() {
   const [liveOrders, setLiveOrders] = useState<any[]>([])
   const [externalPoints, setExternalPoints] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
   const [placeForm, setPlaceForm] = useState<PlaceForm | null>(null)
   const [mapSearch, setMapSearch] = useState('')
@@ -195,8 +197,9 @@ export function MapTab() {
     let data
     try {
       data = await getMapDataAction()
+      setLoadError(null)
     } catch (e: any) {
-      toast.error(e?.message || 'Could not load map data')
+      setLoadError(e?.message || 'Could not load map data')
       setLoading(false)
       return
     }
@@ -529,6 +532,15 @@ export function MapTab() {
       </div>
     )
   }
+
+  if (loadError)
+    return (
+      <EmptyState
+        icon={<MapPin size={32} className="opacity-40" />}
+        message={loadError}
+        action={<Button variant="secondary" onClick={() => { setLoading(true); loadMapData() }}>Retry</Button>}
+      />
+    )
 
   if (loading)
     return (
