@@ -27,6 +27,8 @@ export function WeighbridgeTab() {
   const [selectedEwcId, setSelectedEwcId] = useState('')
   const [wtnGenerating, setWtnGenerating] = useState<string | null>(null)
   const [processing, setProcessing] = useState(false)
+  // SEPA returns need an EWC code on tip-ins; tenants can relax via config require_ewc=false
+  const [requireEwc, setRequireEwc] = useState(true)
   const [form, setForm] = useState({ ...BLANK })
   const [suggestions, setSuggestions] = useState<any[]>([])
   const searchTimer = useRef<any>(null)
@@ -34,6 +36,8 @@ export function WeighbridgeTab() {
   useEffect(() => {
     load()
     getEwcCodesAction().then(setEwcCodes).catch(() => {})
+    supabase.from('config').select('value').eq('key', 'require_ewc').maybeSingle()
+      .then(({ data }) => { if (data) setRequireEwc(String((data as { value: unknown }).value) !== 'false') })
     const queueCh = supabase.channel('wb-queue')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'active_tippers' }, load)
       .subscribe()
@@ -166,6 +170,10 @@ export function WeighbridgeTab() {
     if (!form.customerName) { toast.error('Enter customer name'); return }
     if (!form.grossWeight) { toast.error('Capture or enter gross weight'); return }
     if (!form.tareWeight) { toast.error('Capture or enter tare weight'); return }
+    if (requireEwc && form.direction === 'On-site' && !selectedEwcId) {
+      toast.error('EWC code is required for incoming waste (SEPA)')
+      return
+    }
 
     setProcessing(true)
     const selectedEwc = ewcCodes.find(e => e.id === selectedEwcId)
