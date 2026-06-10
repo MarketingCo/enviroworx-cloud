@@ -495,6 +495,7 @@ export async function getDriverJobs(tenantId: string, driverName: string) {
     .eq('driver_name', driverName)
     .lte('date', today)
     .in('status', ['Booked', 'Assigned', 'Out for Delivery'])
+    .order('route_order', { ascending: true, nullsFirst: false })
     .order('address')
 
   const { data: fuelCards } = await supabase

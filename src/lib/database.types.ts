@@ -1462,6 +1462,7 @@ export type Database = {
           photo_proof: string | null
           priority_level: number | null
           proof_photo_url: string | null
+          route_order: number | null
           skip_id: string | null
           skip_id_used: string | null
           skip_size: string
@@ -1505,6 +1506,7 @@ export type Database = {
           photo_proof?: string | null
           priority_level?: number | null
           proof_photo_url?: string | null
+          route_order?: number | null
           skip_id?: string | null
           skip_id_used?: string | null
           skip_size: string
@@ -1548,6 +1550,7 @@ export type Database = {
           photo_proof?: string | null
           priority_level?: number | null
           proof_photo_url?: string | null
+          route_order?: number | null
           skip_id?: string | null
           skip_id_used?: string | null
           skip_size?: string

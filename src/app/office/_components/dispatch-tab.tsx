@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import { Truck, RefreshCw, Zap, X, CheckCircle, DollarSign } from 'lucide-react'
 import { getDispatchJobsAction as getDispatchJobs } from '@/app/actions/office-data'
 import { assignDriverToJobAction, autoAssignJobsAction, cancelBookingAction } from '@/app/actions/operations'
+import { optimiseDriverRouteAction, saveRouteOrderAction, type OptimisedRoute } from '@/app/actions/routing'
 import { syncOrderToQuickBooks } from '@/app/actions/quickbooks'
 
 import { fmt, today, tomorrow, SectionHeader, Badge, statusColor, Button, EmptyState } from './shared'
@@ -18,6 +19,9 @@ export function DispatchTab() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<'time' | 'area'>('time')
+  const [route, setRoute] = useState<OptimisedRoute | null>(null)
+  const [optimising, setOptimising] = useState<string | null>(null)
+  const [savingRoute, setSavingRoute] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -82,6 +86,33 @@ export function DispatchTab() {
 
   const unassigned = sortedJobs.filter(j => !j.driver_name)
   const assigned = sortedJobs.filter(j => j.driver_name)
+  const driversWithRuns = [...new Set(assigned.filter(j => !['Completed', 'Cancelled', 'Aborted'].includes(j.status)).map(j => j.driver_name))]
+    .map(name => ({ name, count: assigned.filter(j => j.driver_name === name && !['Completed', 'Cancelled', 'Aborted'].includes(j.status)).length }))
+    .filter(d => d.count >= 2)
+
+  async function handleOptimise(driverName: string) {
+    setOptimising(driverName)
+    try {
+      setRoute(await optimiseDriverRouteAction(driverName, dispatchDate))
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not optimise route')
+    }
+    setOptimising(null)
+  }
+
+  async function handleSaveRoute() {
+    if (!route) return
+    setSavingRoute(true)
+    try {
+      await saveRouteOrderAction(route.stops.map(st => st.orderId))
+      toast.success(`Route saved — ${route.driverName}'s jobs now run in this order`)
+      setRoute(null)
+      load()
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not save route')
+    }
+    setSavingRoute(false)
+  }
 
   return (
     <div className="space-y-6">
@@ -135,6 +166,44 @@ export function DispatchTab() {
         </div>
       )}
 
+      {route && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setRoute(null)}>
+          <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-xl p-6 space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black text-white uppercase tracking-widest">Optimised run — {route.driverName}</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  {route.date} · {route.totalDistanceKm} km · ~{Math.floor(route.totalDurationMin / 60)}h {route.totalDurationMin % 60}m driving · starts and ends at the yard
+                </p>
+              </div>
+              <button onClick={() => setRoute(null)} className="text-slate-500 hover:text-white"><X size={16} /></button>
+            </div>
+            <ol className="space-y-2">
+              {route.stops.map((st, i) => (
+                <li key={st.orderId} className="flex items-center gap-3 bg-slate-800/60 border border-white/5 rounded-lg p-3">
+                  <span className="w-7 h-7 shrink-0 rounded-full bg-primary text-slate-900 font-black text-sm flex items-center justify-center">{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-bold text-sm truncate">{st.customerName} <span className="text-slate-500 font-normal">· {st.jobType} · {st.skipSize}yd</span></p>
+                    <p className="text-xs text-slate-400 truncate">{st.address}</p>
+                  </div>
+                  <span className="text-xs text-slate-500 whitespace-nowrap">+{st.legDurationMin}m · {st.legDistanceKm}km</span>
+                </li>
+              ))}
+            </ol>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setRoute(null)} className="px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest text-slate-400 hover:text-white">Cancel</button>
+              <button
+                onClick={handleSaveRoute}
+                disabled={savingRoute}
+                className="px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest bg-primary text-slate-900 disabled:opacity-50"
+              >
+                {savingRoute ? 'Saving…' : 'Save order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Unassigned */}
       {unassigned.length > 0 && (
         <div>
@@ -179,6 +248,21 @@ export function DispatchTab() {
       {assigned.length > 0 && (
         <div>
           <SectionHeader title={`Assigned (${assigned.length})`} />
+          {driversWithRuns.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Optimise route:</span>
+              {driversWithRuns.map(d => (
+                <button
+                  key={d.name}
+                  onClick={() => handleOptimise(d.name)}
+                  disabled={optimising !== null}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-black uppercase bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all disabled:opacity-50"
+                >
+                  <Zap size={12} /> {optimising === d.name ? 'Optimising…' : `${d.name} (${d.count})`}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="space-y-2">
             {assigned.map((job: any) => {
               const isSynced = job.comments?.includes('[QB Sync:')
