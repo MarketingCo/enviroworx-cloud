@@ -75,6 +75,13 @@ date_issued, expiry_date, status, tenant_id.
 > scripts/weighbridge-monitor.py for the yard PC (streams live readings; needs SCALE_API_URL
 > + SCALE_API_SECRET in its .env). Endpoint verified end-to-end against production.
 > Note for P4.3: vehicles table has no RLS read policy — its realtime events won't deliver.
+> 2026-06-10 (later): Phase 3 complete (P3.1 permits tab + cron warnings, P3.2 demurrage
+> button, P3.3 route optimisation + route_order migration 20260610000001, P3.4 EWC gate,
+> P3.5 portal collection requests; permits migration 20260610000000 — all applied to live).
+> P5.1 (tenant-scope vitest tripwire, `npm test`), P5.2 (reportError → MONITORING_WEBHOOK_URL)
+> and P5.4 (audit fixes 48→10; rest need breaking upgrades) also done. REMAINING: Phase 4
+> (wait for a few days of stability first), P5.3 pre-auth tenant context, P5.5 /blog//demo/
+> /apply decision (needs Iain). Set config key yard_address for accurate route optimisation.
 
 ---
 
