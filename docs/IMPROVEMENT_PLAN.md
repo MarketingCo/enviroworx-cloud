@@ -66,9 +66,15 @@ Columns for P3.1 reference: id, created_at, skip_id, location, permit_number, da
 date_issued, expiry_date, status, tenant_id.
 
 > **Status note:** P0.1–P0.3 fixed 2026-06-09 (commit b5015f0; view migration applied to live).
-> Phase 1 (P1.1–P1.6) completed 2026-06-09 — map needs a visual smoke test on the live deploy
-> before Phase 2 starts (advanced markers require the marker library + vector mapId; check
-> pins, clustering, drag-to-move, search, info-window buttons).
+> Phase 1 (P1.1–P1.6) completed 2026-06-09; Phase 2 (P2.1–P2.4) completed 2026-06-10.
+> Both need a visual smoke test on the live deploy (map: pins/clustering/drag/search/info
+> buttons; tabs: readability + retry states; / homepage).
+> 2026-06-10: live weighbridge capture fixed outside the plan — supabase_realtime publication
+> was empty (migration 20260609000003 adds all subscribed tables; applied to live), new
+> POST /api/scale ingest (SCALE_INGEST_SECRET in Vercel), captureScale server fallback, and
+> scripts/weighbridge-monitor.py for the yard PC (streams live readings; needs SCALE_API_URL
+> + SCALE_API_SECRET in its .env). Endpoint verified end-to-end against production.
+> Note for P4.3: vehicles table has no RLS read policy — its realtime events won't deliver.
 
 ---
 
