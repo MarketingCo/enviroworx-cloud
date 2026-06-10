@@ -83,13 +83,39 @@ export async function GET(request: Request) {
       }
     }
 
+    // 3. Permit expiry warnings: surface permits expiring in 7 or 2 days in Activity
+    const warnDates = [7, 2].map((days) => {
+      const d = new Date()
+      d.setDate(d.getDate() + days)
+      return { days, date: d.toISOString().split('T')[0] }
+    })
+    let permitWarnings = 0
+    for (const { days, date } of warnDates) {
+      const { data: expiring } = await supabaseAdmin
+        .from('permits')
+        .select('id, location, permit_number, expiry_date, skip_id')
+        .eq('expiry_date', date)
+        .neq('status', 'Expired')
+      for (const permit of expiring ?? []) {
+        await safeActivityLog({
+          type: 'permit.expiring',
+          message: `Permit ${permit.permit_number || ''} at ${permit.location} expires in ${days} days (${permit.expiry_date})`,
+          status: 'Warning',
+          entityType: 'permit',
+          entityId: permit.id,
+          metadata: { daysLeft: days, skipId: permit.skip_id },
+        })
+        permitWarnings++
+      }
+    }
+
     await safeActivityLog({
       type: 'SYS',
-      message: `Sent ${sent} collection reminders + ${overstaySent} overstay reminders`,
+      message: `Sent ${sent} collection reminders + ${overstaySent} overstay reminders; ${permitWarnings} permit expiry warnings`,
       status: 'Completed'
     })
 
-    return NextResponse.json({ success: true, remindersSent: sent, overstaySent })
+    return NextResponse.json({ success: true, remindersSent: sent, overstaySent, permitWarnings })
   } catch (error: any) {
     console.error('SMS Reminder Cron Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

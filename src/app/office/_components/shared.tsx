@@ -10,6 +10,7 @@ export type Tab =
   | 'customers'
   | 'reports'
   | 'fleet'
+  | 'permits'
   | 'inventory'
   | 'map'
   | 'activity'

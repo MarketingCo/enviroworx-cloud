@@ -702,3 +702,94 @@ export async function getStoredTareAction(reg: string, skipSize: string) {
   const server = await import('@/lib/api-server')
   return server.getStoredTare(session.tenantId, reg, skipSize)
 }
+
+// ============================================================
+// PERMITS (P3.1)
+// ============================================================
+
+export type PermitPayload = {
+  id?: string
+  location: string
+  permit_number?: string | null
+  skip_id?: string | null
+  date_applied?: string | null
+  date_issued?: string | null
+  expiry_date?: string | null
+  status: string
+  fee?: number | null
+  notes?: string | null
+}
+
+export async function listPermitsAction() {
+  const session = await assertOffice()
+  const { data, error } = await supabaseAdmin
+    .from('permits')
+    .select('*')
+    .eq('tenant_id', session.tenantId)
+    .order('expiry_date', { ascending: true, nullsFirst: false })
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+export async function upsertPermitAction(payload: PermitPayload) {
+  const session = await assertOffice()
+  const { id, ...fields } = payload
+  if (!fields.location?.trim()) throw new Error('Location is required')
+
+  const row = {
+    ...fields,
+    location: fields.location.trim(),
+    permit_number: fields.permit_number?.trim() || null,
+    skip_id: fields.skip_id?.trim() || null,
+    date_applied: fields.date_applied || null,
+    date_issued: fields.date_issued || null,
+    expiry_date: fields.expiry_date || null,
+    fee: fields.fee ?? null,
+    notes: fields.notes?.trim() || null,
+  }
+
+  if (id) {
+    const { error } = await supabaseAdmin
+      .from('permits')
+      .update(row)
+      .eq('tenant_id', session.tenantId)
+      .eq('id', id)
+    if (error) throw new Error(error.message)
+  } else {
+    const { error } = await supabaseAdmin
+      .from('permits')
+      .insert({ ...row, tenant_id: session.tenantId })
+    if (error) throw new Error(error.message)
+  }
+
+  const { safeActivityLog } = await import('@/lib/supabase')
+  await safeActivityLog({
+    type: id ? 'permit.update' : 'permit.create',
+    message: `${id ? 'Updated' : 'Created'} permit — ${row.location}`,
+    status: 'Completed',
+    actorName: session.name,
+    entityType: 'permit',
+    entityId: id,
+  })
+  return { success: true }
+}
+
+export async function deletePermitAction(id: string) {
+  const session = await assertOffice()
+  const { error } = await supabaseAdmin
+    .from('permits')
+    .delete()
+    .eq('tenant_id', session.tenantId)
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+  const { safeActivityLog } = await import('@/lib/supabase')
+  await safeActivityLog({
+    type: 'permit.delete',
+    message: 'Deleted permit',
+    status: 'Completed',
+    actorName: session.name,
+    entityType: 'permit',
+    entityId: id,
+  })
+  return { success: true }
+}

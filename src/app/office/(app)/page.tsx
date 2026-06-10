@@ -19,6 +19,7 @@ import {
   Settings,
   LogOut,
   ScrollText,
+  Signpost,
 } from 'lucide-react'
 import type { Tab, DashStats } from '../_components/shared'
 import { DashboardTab } from '../_components/dashboard-tab'
@@ -32,6 +33,7 @@ import { FleetTab } from '../_components/fleet-tab'
 import { MapTab } from '../_components/map-tab'
 import { SettingsTab } from '../_components/settings-tab'
 import { ActivityTab } from '../_components/activity-tab'
+import { PermitsTab } from '../_components/permits-tab'
 
 export default function OfficePage() {
   const router = useRouter()
@@ -119,6 +121,7 @@ export default function OfficePage() {
     { id: 'customers', label: 'Customers', icon: <Users size={16} /> },
     { id: 'reports', label: 'Reports', icon: <FileText size={16} /> },
     { id: 'fleet', label: 'Fleet', icon: <Wrench size={16} /> },
+    { id: 'permits', label: 'Permits', icon: <Signpost size={16} /> },
     { id: 'inventory', label: 'Inventory', icon: <Package size={16} /> },
     { id: 'map', label: 'Live Map', icon: <TrendingUp size={16} /> },
     { id: 'activity', label: 'Activity', icon: <ScrollText size={16} /> },
@@ -228,6 +231,7 @@ export default function OfficePage() {
         {tab === 'customers' && <CustomersTab />}
         {tab === 'reports' && <ReportsTab />}
         {tab === 'fleet' && <FleetTab />}
+        {tab === 'permits' && <PermitsTab />}
         {tab === 'inventory' && <InventoryTab />}
         {tab === 'map' && <MapTab />}
         {tab === 'activity' && <ActivityTab />}

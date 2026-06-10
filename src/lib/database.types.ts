@@ -1600,11 +1600,13 @@ export type Database = {
           created_at: string | null
           date_applied: string | null
           date_issued: string | null
-          expiry_date: string
+          expiry_date: string | null
+          fee: number | null
           id: string
           location: string
+          notes: string | null
           permit_number: string | null
-          skip_id: string
+          skip_id: string | null
           status: string | null
           tenant_id: string | null
         }
@@ -1612,11 +1614,13 @@ export type Database = {
           created_at?: string | null
           date_applied?: string | null
           date_issued?: string | null
-          expiry_date: string
+          expiry_date?: string | null
+          fee?: number | null
           id?: string
           location: string
+          notes?: string | null
           permit_number?: string | null
-          skip_id: string
+          skip_id?: string | null
           status?: string | null
           tenant_id?: string | null
         }
@@ -1624,11 +1628,13 @@ export type Database = {
           created_at?: string | null
           date_applied?: string | null
           date_issued?: string | null
-          expiry_date?: string
+          expiry_date?: string | null
+          fee?: number | null
           id?: string
           location?: string
+          notes?: string | null
           permit_number?: string | null
-          skip_id?: string
+          skip_id?: string | null
           status?: string | null
           tenant_id?: string | null
         }
@@ -2667,6 +2673,7 @@ export type Database = {
           date: string | null
           id: string | null
           skip_id: string | null
+          skip_size: string | null
           source: string | null
           tenant_id: string | null
         }
