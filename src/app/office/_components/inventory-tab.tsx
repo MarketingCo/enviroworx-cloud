@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase-browser'
 import { DEFAULT_CONFIG } from '@/lib/config'
 import toast from 'react-hot-toast'
-import { getInventoryAction } from '@/app/actions/office-data'
+import { getInventoryAction, getOfficeSessionAction } from '@/app/actions/office-data'
 import { SectionHeader, Button, EmptyState } from './shared'
 
 export function InventoryTab() {
@@ -14,6 +14,8 @@ export function InventoryTab() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [officeRole, setOfficeRole] = useState<string | null>(null)
+  const [charging, setCharging] = useState(false)
 
   async function load() {
     setError(null)
@@ -27,6 +29,7 @@ export function InventoryTab() {
   }
 
   useEffect(() => {
+    getOfficeSessionAction().then((sess) => setOfficeRole(sess.officeRole)).catch(() => {})
     load()
     const ch = supabase.channel('inv').on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => {
       load()
@@ -50,6 +53,35 @@ export function InventoryTab() {
     Available: inventory.filter(s => s.status === 'Available').length,
     'In Use': inventory.filter(s => s.status === 'In Use' || s.status === 'Delivered').length,
     Damaged: inventory.filter(s => s.status === 'Damaged').length,
+  }
+
+  const demurrageDays = DEFAULT_CONFIG.demurrageDays || 28
+  const overstays = inventory.filter((sk) => {
+    if (!['In Use', 'Delivered'].includes(sk.status) || !sk.customer_name || !sk.delivery_date) return false
+    const days = Math.floor((Date.now() - new Date(sk.delivery_date).getTime()) / 86400000)
+    return days > demurrageDays
+  })
+
+  async function chargeOverstays() {
+    const list = overstays
+      .map((sk) => `${sk.skip_id} — ${sk.customer_name} (${Math.floor((Date.now() - new Date(sk.delivery_date).getTime()) / 86400000)} days)`)
+      .join('\n')
+    if (!confirm(`Charge demurrage (£${DEFAULT_CONFIG.demurrageNetFee} net each) for ${overstays.length} overstayed skip(s)?\n\n${list}\n\nSkips already charged in the last 7 days are skipped automatically.`)) return
+    setCharging(true)
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'demurrage' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Charge failed')
+      toast.success(data?.message || `Charged ${data?.count ?? 0} overstay(s)`)
+      load()
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not charge overstays')
+    }
+    setCharging(false)
   }
 
   function statusBadge(status: string) {
@@ -88,7 +120,12 @@ export function InventoryTab() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex gap-3 flex-wrap items-center">
+        {['admin', 'office'].includes(officeRole || '') && overstays.length > 0 && (
+          <Button variant="danger" loading={charging} onClick={chargeOverstays}>
+            Charge overstays ({overstays.length})
+          </Button>
+        )}
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search skip ID, customer, address..."
           className="flex-1 min-w-[200px] bg-slate-900 border border-white/10 text-white px-3 py-2 rounded-lg text-sm focus:border-primary outline-none" />
