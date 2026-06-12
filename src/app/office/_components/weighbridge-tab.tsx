@@ -365,52 +365,69 @@ export function WeighbridgeTab() {
           </div>
         </div>
 
-        {/* ── WEIGHING SECTION ── */}
-        {/* Context-aware: if tare is stored, just show gross. If not, show both with clear labels. */}
-        <div className={`grid gap-3 ${hasSotredTare ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        {/* ── WEIGHING — one step at a time, top to bottom ── */}
+        <div className="space-y-2">
 
-          {/* GROSS — always shown */}
-          <div className={`${hasGross ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-slate-800/40 border-white/10'} border rounded-lg p-3 transition-all`}>
-            <div className="flex justify-between items-center mb-2">
-              <div>
-                <p className={`text-[11px] font-black uppercase tracking-widest ${hasGross ? 'text-emerald-400' : 'text-slate-500'}`}>
-                  {hasSotredTare ? 'Gross Weight (kg)' : '① Incoming — vehicle LOADED'}
-                </p>
-                {!hasSotredTare && !hasGross && (
-                  <p className="text-[11px] text-slate-500 mt-0.5">Capture when vehicle arrives on scale</p>
-                )}
+          {/* STEP 1 — incoming (gross). Collapses to a slim bar when done. */}
+          {hasGross ? (
+            <div className="flex items-center justify-between bg-emerald-900/20 border border-emerald-500/30 rounded-lg px-4 py-2.5">
+              <p className="text-xs font-black uppercase tracking-widest text-emerald-400">
+                ✓ {hasSotredTare ? 'Gross weight' : 'Step 1 · Incoming'}
+              </p>
+              <div className="flex items-center gap-1.5">
+                <input type="number" value={form.grossWeight} onChange={e => set('grossWeight', e.target.value)}
+                  className="w-28 bg-transparent border-0 text-right text-xl font-black text-white outline-none" />
+                <span className="text-xs font-bold text-slate-500">kg</span>
               </div>
-              <button onClick={() => captureScale('grossWeight')}
-                className="text-xs font-black text-primary uppercase hover:underline whitespace-nowrap">
-                ⚡ Capture
-              </button>
             </div>
-            <input type="number" value={form.grossWeight} onChange={e => set('grossWeight', e.target.value)}
-              placeholder="0"
-              className={`w-full bg-transparent border-0 text-2xl font-black text-white outline-none placeholder:text-slate-700`} />
-          </div>
-
-          {/* TARE — hidden if auto-filled from stored values */}
-          {!hasSotredTare && (
-            <div className={`${hasTare ? 'bg-blue-900/20 border-blue-500/30' : 'bg-slate-800/40 border-white/10'} border rounded-lg p-3 transition-all`}>
-              <div className="flex justify-between items-center mb-2">
-                <div>
-                  <p className={`text-[11px] font-black uppercase tracking-widest ${hasTare ? 'text-blue-400' : 'text-slate-500'}`}>
-                    ② Outgoing — vehicle EMPTY
-                  </p>
-                  {!hasTare && (
-                    <p className="text-[11px] text-slate-500 mt-0.5">Capture when vehicle returns from tipping</p>
-                  )}
-                </div>
-                <button onClick={() => captureScale('tareWeight')}
-                  className="text-xs font-black text-primary uppercase hover:underline whitespace-nowrap">
-                  ⚡ Capture
+          ) : (
+            <div className="bg-slate-800/40 border border-primary/40 rounded-lg p-4">
+              <p className="text-sm font-black uppercase tracking-widest text-white">Step 1 · Incoming — vehicle loaded</p>
+              <p className="text-[11px] text-slate-500 mt-0.5 mb-3">Capture when the loaded vehicle is on the scale</p>
+              <div className="flex items-stretch gap-2">
+                <input type="number" value={form.grossWeight} onChange={e => set('grossWeight', e.target.value)}
+                  placeholder="0"
+                  className="flex-1 min-w-0 bg-slate-900/60 border border-white/10 rounded-lg px-3 text-2xl font-black text-white outline-none placeholder:text-slate-700 focus:border-primary" />
+                <button onClick={() => captureScale('grossWeight')}
+                  className="bg-primary text-slate-900 px-4 rounded-lg font-black text-sm uppercase tracking-wide whitespace-nowrap hover:scale-[1.02] transition-all">
+                  ⚡ Capture{liveWeight !== null ? ` ${liveWeight.toLocaleString()} kg` : ''}
                 </button>
               </div>
-              <input type="number" value={form.tareWeight} onChange={e => { set('tareWeight', e.target.value); setTareMsg('') }}
-                placeholder="0"
-                className="w-full bg-transparent border-0 text-2xl font-black text-white outline-none placeholder:text-slate-700" />
             </div>
+          )}
+
+          {/* STEP 2 — outgoing (tare). Skipped entirely when a stored tare applies. */}
+          {!hasSotredTare && (
+            hasTare ? (
+              <div className="flex items-center justify-between bg-blue-900/20 border border-blue-500/30 rounded-lg px-4 py-2.5">
+                <p className="text-xs font-black uppercase tracking-widest text-blue-400">✓ Step 2 · Outgoing</p>
+                <div className="flex items-center gap-1.5">
+                  <input type="number" value={form.tareWeight} onChange={e => { set('tareWeight', e.target.value); setTareMsg('') }}
+                    className="w-28 bg-transparent border-0 text-right text-xl font-black text-white outline-none" />
+                  <span className="text-xs font-bold text-slate-500">kg</span>
+                </div>
+              </div>
+            ) : (
+              <div className={`rounded-lg p-4 border transition-all ${hasGross ? 'bg-slate-800/40 border-blue-500/40' : 'bg-slate-800/20 border-white/5 opacity-50'}`}>
+                <p className={`text-sm font-black uppercase tracking-widest ${hasGross ? 'text-white' : 'text-slate-500'}`}>Step 2 · Outgoing — vehicle empty</p>
+                <p className="text-[11px] text-slate-500 mt-0.5 mb-3">
+                  {hasGross
+                    ? 'Capture when the empty vehicle returns to the scale — or park it in the queue while it tips'
+                    : 'Unlocks after Step 1'}
+                </p>
+                {hasGross && (
+                  <div className="flex items-stretch gap-2">
+                    <input type="number" value={form.tareWeight} onChange={e => { set('tareWeight', e.target.value); setTareMsg('') }}
+                      placeholder="0"
+                      className="flex-1 min-w-0 bg-slate-900/60 border border-white/10 rounded-lg px-3 text-2xl font-black text-white outline-none placeholder:text-slate-700 focus:border-blue-400" />
+                    <button onClick={() => captureScale('tareWeight')}
+                      className="bg-blue-600 text-white px-4 rounded-lg font-black text-sm uppercase tracking-wide whitespace-nowrap hover:scale-[1.02] transition-all">
+                      ⚡ Capture{liveWeight !== null ? ` ${liveWeight.toLocaleString()} kg` : ''}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
           )}
         </div>
 

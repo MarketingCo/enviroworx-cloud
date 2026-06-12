@@ -20,6 +20,7 @@ import {
   LogOut,
   ScrollText,
   Signpost,
+  ChevronDown,
 } from 'lucide-react'
 import type { Tab, DashStats } from '../_components/shared'
 import { DashboardTab } from '../_components/dashboard-tab'
@@ -38,6 +39,7 @@ import { PermitsTab } from '../_components/permits-tab'
 export default function OfficePage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('dashboard')
+  const [moreOpen, setMoreOpen] = useState(false)
   const [dashData, setDashData] = useState<DashStats | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [staffName, setStaffName] = useState<string | null>(null)
@@ -128,6 +130,12 @@ export default function OfficePage() {
     { id: 'settings', label: 'Settings', icon: <Settings size={16} /> },
   ]
 
+  const PRIMARY_TABS: Tab[] = ['dashboard', 'dispatch', 'weighbridge', 'bookings', 'map']
+  const primaryTabs = tabs.filter((t) => PRIMARY_TABS.includes(t.id))
+  const moreTabs = tabs.filter((t) => !PRIMARY_TABS.includes(t.id))
+  const moreActive = moreTabs.some((t) => t.id === tab)
+  const activeMoreTab = moreTabs.find((t) => t.id === tab)
+
   const isConfigMissing = !process.env.NEXT_PUBLIC_SUPABASE_URL
 
   return (
@@ -155,11 +163,11 @@ export default function OfficePage() {
             )}
           </div>
 
-          <nav className="flex items-center gap-1 overflow-x-auto">
-            {tabs.map((t) => (
+          <nav className="flex items-center gap-1">
+            {primaryTabs.map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id)}
+                onClick={() => { setTab(t.id); setMoreOpen(false) }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-black uppercase tracking-wide transition-all whitespace-nowrap ${
                   tab === t.id
                     ? 'bg-primary text-white'
@@ -169,6 +177,40 @@ export default function OfficePage() {
                 {t.icon} {t.label}
               </button>
             ))}
+
+            {/* Everything used less often lives under More */}
+            <div className="relative">
+              <button
+                onClick={() => setMoreOpen((o) => !o)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-black uppercase tracking-wide transition-all whitespace-nowrap ${
+                  moreActive
+                    ? 'bg-primary text-white'
+                    : 'text-slate-500 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                {moreActive ? activeMoreTab?.icon : null}
+                {moreActive ? activeMoreTab?.label : 'More'}
+                <ChevronDown size={12} className={`transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {moreOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-50 w-44 bg-slate-900 border border-white/10 rounded-xl shadow-2xl py-1.5">
+                    {moreTabs.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => { setTab(t.id); setMoreOpen(false) }}
+                        className={`w-full flex items-center gap-2 px-3.5 py-2 text-xs font-black uppercase tracking-wide text-left transition-all ${
+                          tab === t.id ? 'text-primary' : 'text-slate-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {t.icon} {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </nav>
 
           <div className="flex items-center gap-3">
