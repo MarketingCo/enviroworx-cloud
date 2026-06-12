@@ -6,13 +6,14 @@ import { DEFAULT_CONFIG } from '@/lib/config'
 import toast from 'react-hot-toast'
 import { getInventoryAction, getOfficeSessionAction } from '@/app/actions/office-data'
 import { SectionHeader, Button, EmptyState } from './shared'
+import { getTabCache, setTabCache } from './tab-cache'
 
 export function InventoryTab() {
-  const [inventory, setInventory] = useState<any[]>([])
+  const [inventory, setInventory] = useState<any[]>(() => getTabCache('inventory') ?? [])
   const [filter, setFilter] = useState<'all' | 'Available' | 'In Use' | 'Damaged'>('all')
   const [sizeFilter, setSizeFilter] = useState('all')
   const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !getTabCache('inventory'))
   const [error, setError] = useState<string | null>(null)
   const [officeRole, setOfficeRole] = useState<string | null>(null)
   const [charging, setCharging] = useState(false)
@@ -22,6 +23,7 @@ export function InventoryTab() {
     try {
       const data = await getInventoryAction()
       setInventory(data)
+      setTabCache('inventory', data)
     } catch (e: any) {
       setError(e?.message || 'Could not load inventory')
     }

@@ -11,11 +11,13 @@ import { optimiseDriverRouteAction, saveRouteOrderAction, type OptimisedRoute } 
 import { syncOrderToQuickBooks } from '@/app/actions/quickbooks'
 
 import { fmt, today, tomorrow, SectionHeader, Badge, statusColor, Button, EmptyState } from './shared'
+import { getTabCache, setTabCache } from './tab-cache'
 
 export function DispatchTab() {
-  const [jobs, setJobs] = useState<any[]>([])
-  const [drivers, setDrivers] = useState<any[]>([])
   const [dispatchDate, setDispatchDate] = useState(tomorrow())
+  const cached = getTabCache<{ jobs: any[]; drivers: any[] }>(`dispatch:${tomorrow()}`)
+  const [jobs, setJobs] = useState<any[]>(cached?.jobs ?? [])
+  const [drivers, setDrivers] = useState<any[]>(cached?.drivers ?? [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<'time' | 'area'>('time')
@@ -33,6 +35,7 @@ export function DispatchTab() {
       ])
       setJobs(jobData)
       setDrivers(driverData ?? [])
+      setTabCache(`dispatch:${dispatchDate}`, { jobs: jobData, drivers: driverData ?? [] })
     } catch (e: any) {
       setError(e?.message || 'Could not load dispatch jobs')
     } finally {
@@ -149,7 +152,7 @@ export function DispatchTab() {
         )}
       </div>
 
-      {loading && <p className="text-slate-500 text-sm">Loading jobs...</p>}
+      {loading && jobs.length === 0 && <p className="text-slate-500 text-sm">Loading jobs...</p>}
 
       {!loading && error && (
         <EmptyState

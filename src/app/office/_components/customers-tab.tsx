@@ -14,6 +14,7 @@ import {
 } from '@/app/actions/office-data'
 
 import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor, Button, EmptyState } from './shared'
+import { getTabCache, setTabCache } from './tab-cache'
 
 export function CustomersTab() {
   const [query, setQuery] = useState('')
@@ -33,6 +34,7 @@ export function CustomersTab() {
     try {
       const data = await listCustomersAction(100)
       setResults(data)
+      setTabCache('customers', data)
       setInitialLoaded(true)
     } catch (e: any) {
       setError(e?.message || 'Could not load customers')

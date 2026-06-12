@@ -10,6 +10,7 @@ import {
   type PermitPayload,
 } from '@/app/actions/office-data'
 import { fmt, SectionHeader, Badge, Button, EmptyState, TableShell } from './shared'
+import { getTabCache, setTabCache } from './tab-cache'
 
 const STATUSES = ['Applied', 'Active', 'Expired', 'Rejected']
 
@@ -40,8 +41,8 @@ function expiryBadge(p: any) {
 }
 
 export function PermitsTab() {
-  const [permits, setPermits] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [permits, setPermits] = useState<any[]>(() => getTabCache('permits') ?? [])
+  const [loading, setLoading] = useState(() => !getTabCache('permits'))
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<PermitPayload | null>(null)
   const [saving, setSaving] = useState(false)
@@ -49,7 +50,9 @@ export function PermitsTab() {
   async function load() {
     setError(null)
     try {
-      setPermits(await listPermitsAction())
+      const rows = await listPermitsAction()
+      setPermits(rows)
+      setTabCache('permits', rows)
     } catch (e: any) {
       setError(e?.message || 'Could not load permits')
     }

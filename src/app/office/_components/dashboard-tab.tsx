@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import { AlertTriangle, Signpost, PoundSterling, ChevronRight } from 'lucide-react'
 import { sendOverstaySmsAction } from '@/app/actions/operations'
 
-import { fmt, SectionHeader, type DashStats, type Tab } from './shared'
+import { fmt, SectionHeader, Button, type DashStats, type Tab } from './shared'
 
 /** Command-centre home: what's happening now, what needs action.
  *  Pure statistics live in the slim footer; detail lives in the tabs. */
@@ -91,6 +91,12 @@ export function DashboardTab({
 
   return (
     <div className="space-y-5">
+      {/* ── Quick actions ── */}
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={() => onNavigate?.('weighbridge')}>Weigh a truck</Button>
+        <Button onClick={() => onNavigate?.('bookings')}>New booking</Button>
+      </div>
+
       {/* ── NOW — the day at a glance ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {heroTiles.map((t) => (

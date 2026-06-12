@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { getAuditLogAction } from '@/app/actions/office-data'
 import { SectionHeader, Button, EmptyState } from './shared'
+import { getTabCache, setTabCache } from './tab-cache'
 import toast from 'react-hot-toast'
 
 type AuditRow = {
@@ -18,8 +19,8 @@ type AuditRow = {
 }
 
 export function ActivityTab() {
-  const [rows, setRows] = useState<AuditRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const [rows, setRows] = useState<AuditRow[]>(() => getTabCache('activity') ?? [])
+  const [loading, setLoading] = useState(() => !getTabCache('activity'))
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -28,6 +29,7 @@ export function ActivityTab() {
     try {
       const data = await getAuditLogAction(100)
       setRows(data as AuditRow[])
+      setTabCache('activity', data)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load activity')
     }

@@ -274,10 +274,12 @@ export default function DriverApp() {
 
   if (screen === 'login') {
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-5">
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-5">
         <Toaster position="top-center" />
-        <h1 className="text-3xl font-black text-emerald-400 mb-2">🚛 ENVIROWORX</h1>
-        <p className="text-slate-400 mb-10">Driver Portal</p>
+        <h1 className="text-3xl font-black tracking-tighter uppercase mb-1">
+          Enviroworx <span className="text-emerald-400">Driver</span>
+        </h1>
+        <p className="text-sm text-slate-500 mb-10">Clock in to start your run</p>
         <select value={selectedDriver} onChange={e => setSelectedDriver(e.target.value)}
           className="w-full max-w-sm p-4 rounded-xl bg-slate-800 border-2 border-slate-600 text-white text-lg font-semibold mb-5">
           <option value="">-- Select Your Name --</option>
@@ -292,8 +294,8 @@ export default function DriverApp() {
           className="w-full max-w-sm p-4 rounded-xl bg-slate-800 border-2 border-slate-600 text-white text-lg font-semibold mb-8"
           maxLength={4} inputMode="numeric" />
         <button onClick={handleClockIn}
-          className="w-full max-w-sm bg-gradient-to-r from-emerald-500 to-emerald-700 p-5 rounded-xl text-white font-black text-lg shadow-lg">
-          🕐 CLOCK IN & START
+          className="w-full max-w-sm bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] p-5 rounded-xl text-slate-950 font-black text-lg uppercase tracking-wide transition-all">
+          Clock in & start
         </button>
       </div>
     )

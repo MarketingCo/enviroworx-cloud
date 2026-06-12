@@ -13,11 +13,13 @@ import { logFleetIssueAction, resolveFleetIssueAction,
   listCarrierLicencesAction, upsertCarrierLicenceAction, deleteCarrierLicenceAction } from '@/app/actions/office-data'
 
 import { SectionHeader, Badge, Button, EmptyState } from './shared'
+import { getTabCache, setTabCache } from './tab-cache'
 
 export function FleetTab() {
-  const [lorries, setLorries] = useState<any[]>([])
-  const [drivers, setDrivers] = useState<any[]>([])
-  const [issues, setIssues] = useState<any[]>([])
+  const fleetCache = getTabCache<{ lorries: any[]; drivers: any[]; issues: any[] }>('fleet')
+  const [lorries, setLorries] = useState<any[]>(fleetCache?.lorries ?? [])
+  const [drivers, setDrivers] = useState<any[]>(fleetCache?.drivers ?? [])
+  const [issues, setIssues] = useState<any[]>(fleetCache?.issues ?? [])
   const [showLogIssue, setShowLogIssue] = useState(false)
   const [issueForm, setIssueForm] = useState({ lorry_reg: '', issue_type: 'Mechanical', description: '', reported_by: '' })
   const [savingIssue, setSavingIssue] = useState(false)
@@ -34,6 +36,7 @@ export function FleetTab() {
       setLorries(lorryData)
       setDrivers(driverData)
       setIssues(issueData ?? [])
+      setTabCache('fleet', { lorries: lorryData, drivers: driverData, issues: issueData ?? [] })
     } catch (e: any) {
       setError(e?.message || 'Could not load fleet data')
     }
