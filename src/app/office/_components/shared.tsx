@@ -24,6 +24,7 @@ export interface DashStats {
     tipsToday: number
     estProfitToday: number
   }
+  todayJobs: { total: number; completed: number; unassigned: number }
   inventorySummary: unknown[]
   activeTippers: unknown[]
   unpaidInvoices: unknown[]

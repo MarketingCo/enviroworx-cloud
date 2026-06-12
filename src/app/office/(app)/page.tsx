@@ -260,7 +260,7 @@ export default function OfficePage() {
       )}
 
       <main className="max-w-screen-2xl mx-auto px-6 py-8">
-        {tab === 'dashboard' && <DashboardTab data={dashData} onRefresh={loadDash} />}
+        {tab === 'dashboard' && <DashboardTab data={dashData} onRefresh={loadDash} onNavigate={setTab} />}
         {tab === 'dispatch' && <DispatchTab />}
         {tab === 'weighbridge' && <WeighbridgeTab />}
         {tab === 'bookings' && <BookingsTab />}

@@ -208,6 +208,7 @@ export async function getDashboardStatsAction() {
   const tid = session.tenantId
 
   const [
+    { data: todayOrders },
     { count: completedToday },
     { count: completedWeek },
     { count: futureBookings },
@@ -220,6 +221,7 @@ export async function getDashboardStatsAction() {
     { data: expiringPermits },
     { data: revenueData },
   ] = await Promise.all([
+    supabaseAdmin.from('orders').select('status, driver_name').eq('tenant_id', tid).eq('date', today).neq('status', 'Cancelled'),
     supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('tenant_id', tid).eq('status', 'Completed').eq('date', today),
     supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('tenant_id', tid).eq('status', 'Completed').gte('date', weekStart),
     supabaseAdmin.from('orders').select('id', { count: 'exact', head: true }).eq('tenant_id', tid).in('status', ['Booked', 'Assigned']).gt('date', today),
@@ -259,6 +261,11 @@ export async function getDashboardStatsAction() {
       futureBookings: futureBookings ?? 0,
       tipsToday: tipsToday ?? 0,
       estProfitToday: totalRev - estDisposalCost,
+    },
+    todayJobs: {
+      total: todayOrders?.length ?? 0,
+      completed: todayOrders?.filter((o) => o.status === 'Completed').length ?? 0,
+      unassigned: todayOrders?.filter((o) => !o.driver_name && o.status === 'Booked').length ?? 0,
     },
     inventorySummary: inventorySummary ?? [],
     activeTippers: activeTippers ?? [],
