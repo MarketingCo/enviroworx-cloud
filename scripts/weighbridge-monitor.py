@@ -16,8 +16,8 @@ app URL and a shared secret — no database key.
     BRIDGE_IP=192.168.10.100
     BRIDGE_PORT=23
     WEIGHT_THRESHOLD=1000
-    SCALE_API_URL=https://<your-app-domain>/api/scale
     SCALE_API_SECRET=<same value as SCALE_INGEST_SECRET in Vercel>
+    (SCALE_API_URL is optional — defaults to the production app)
     GOOGLE_CREDS=envi3.json
     GOOGLE_SHEET_ID=1NQIPDNaW4zi7Uzzm38c0RzNI5-wctCPMrXfMDEnv2Yw
 """
@@ -25,6 +25,7 @@ app URL and a shared secret — no database key.
 import json
 import logging
 import os
+import pathlib
 import re
 import socket
 import sys
@@ -40,12 +41,26 @@ try:
 except ImportError:
     HAS_GSPREAD = False
 
-# --- Dotenv ---
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
+# --- .env loading ---
+# Looks next to this script first, then in the working directory.
+# python-dotenv is NOT required.
+def _load_env_file(path):
+    try:
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            k, _, v = line.partition('=')
+            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        return True
+    except (FileNotFoundError, OSError):
+        return False
+
+for _candidate in (pathlib.Path(__file__).resolve().parent / '.env',
+                   pathlib.Path.cwd() / '.env'):
+    if _load_env_file(_candidate):
+        print(f"Loaded settings from {_candidate}")
+        break
 
 
 # ============================================================================
@@ -57,7 +72,7 @@ PORT = int(os.getenv('BRIDGE_PORT', '23'))
 WEIGHT_THRESHOLD = int(os.getenv('WEIGHT_THRESHOLD', '1000'))  # kg
 
 # EnviroWorx Cloud live-scale ingest
-SCALE_API_URL = os.getenv('SCALE_API_URL', '')
+SCALE_API_URL = os.getenv('SCALE_API_URL', 'https://enviroworx-cloud.vercel.app/api/scale')
 SCALE_API_SECRET = os.getenv('SCALE_API_SECRET', '')
 LIVE_POST_INTERVAL = float(os.getenv('LIVE_POST_INTERVAL', '3'))  # seconds between live posts
 LIVE_POST_DELTA = float(os.getenv('LIVE_POST_DELTA', '50'))       # or post sooner if weight moves this many kg
@@ -179,9 +194,10 @@ def main():
     print("  Dini Argeo → EnviroWorx Cloud + Google Sheets")
     print("=" * 50)
 
-    if not SCALE_API_URL or not SCALE_API_SECRET:
-        log.warning("⚠️  SCALE_API_URL / SCALE_API_SECRET not set — the office app")
-        log.warning("    will NOT get live weights. Set both in .env.")
+    if not SCALE_API_SECRET:
+        log.warning("⚠️  SCALE_API_SECRET not set — the office app will NOT get live weights.")
+        log.warning(f"    Create a .env file next to this script ({pathlib.Path(__file__).resolve().parent})")
+        log.warning("    containing:  SCALE_API_SECRET=<the secret>")
 
     sheet, sheet_transfer, has_transfer = init_google_sheets()
 
