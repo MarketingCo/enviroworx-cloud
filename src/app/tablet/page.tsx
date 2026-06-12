@@ -57,7 +57,7 @@ export default function TabletApp() {
 
   async function loadData() {
     const [{ data: drvs }, { data: ys }, { data: lors }] = await Promise.all([
-      supabase.from('drivers_public' as 'drivers').select('id, name, status').order('name'),
+      fetch('/api/public/drivers').then(r => (r.ok ? r.json() : [])).catch(() => []).then(data => ({ data })),
       supabase.from('yard_staff_public' as 'yard_staff').select('id, name').order('name'),
       supabase.from('lorries').select('*').order('registration'),
     ])

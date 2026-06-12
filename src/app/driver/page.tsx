@@ -80,8 +80,8 @@ export default function DriverApp() {
   }, [])
 
   async function loadInitialData() {
-    const [{ data: drvs }, { data: lors }] = await Promise.all([
-      supabase.from('drivers_public' as 'drivers').select('id, name, status, phone').order('name'),
+    const [drvs, { data: lors }] = await Promise.all([
+      fetch('/api/public/drivers').then(r => (r.ok ? r.json() : [])).catch(() => []),
       supabase.from('lorries').select('*').order('registration'),
     ])
     setDrivers(drvs ?? [])
