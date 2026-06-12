@@ -101,7 +101,7 @@ export function Button({
   return (
     <button
       disabled={disabled || loading}
-      className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed ${BUTTON_VARIANTS[variant]} ${className}`}
+      className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all disabled:opacity-50 disabled:cursor-not-allowed ${BUTTON_VARIANTS[variant]} ${className}`}
       {...rest}
     >
       {loading ? (

@@ -29,6 +29,7 @@ export function WeighbridgeTab() {
   const [processing, setProcessing] = useState(false)
   // SEPA returns need an EWC code on tip-ins; tenants can relax via config require_ewc=false
   const [requireEwc, setRequireEwc] = useState(true)
+  const [attempted, setAttempted] = useState(false)
   const [scaleActivity, setScaleActivity] = useState<{ peaks: { weight_kg: number | null; timestamp: string | null }[]; tickets: number } | null>(null)
   const [activityOpen, setActivityOpen] = useState(false)
   const [form, setForm] = useState({ ...BLANK })
@@ -64,6 +65,7 @@ export function WeighbridgeTab() {
   function set(k: string, v: string) { setForm(f => ({ ...f, [k]: v })) }
 
   function reset() {
+    setAttempted(false)
     setForm({ ...BLANK })
     setManualPrice('')
     setTareMsg('')
@@ -169,6 +171,7 @@ export function WeighbridgeTab() {
   }
 
   async function handleWeighAndTicket() {
+    setAttempted(true)
     if (!form.lorryReg) { toast.error('Enter vehicle reg'); return }
     if (!form.customerName) { toast.error('Enter customer name'); return }
     if (!form.grossWeight) { toast.error('Capture or enter gross weight'); return }
@@ -197,11 +200,11 @@ export function WeighbridgeTab() {
       const wlId = result.weightLogId
       toast.success((t) => (
         <div className="flex flex-col gap-2">
-          <span className="font-bold">✅ Ticket {result.ticketNumber} — {net.toLocaleString()} kg net</span>
+          <span className="font-bold">Ticket {result.ticketNumber} — {net.toLocaleString()} kg net</span>
           <div className="flex gap-2">
             <button onClick={() => { window.open(`/api/documents?type=WTN&ticketNumber=${result.ticketNumber}`, '_blank'); toast.dismiss(t.id) }}
               className="bg-emerald-500 text-white px-3 py-1.5 rounded text-xs font-black uppercase hover:bg-emerald-600">
-              🖨️ Print Ticket
+              Print ticket
             </button>
             {wlId && (
               <button
@@ -213,7 +216,7 @@ export function WeighbridgeTab() {
                 }}
                 disabled={wtnGenerating === wlId}
                 className="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-black uppercase hover:bg-blue-500 disabled:opacity-50">
-                {wtnGenerating === wlId ? '…' : '📄 WTN'}
+                {wtnGenerating === wlId ? '…' : 'WTN'}
               </button>
             )}
           </div>
@@ -311,14 +314,14 @@ export function WeighbridgeTab() {
 
         {/* Vehicle reg */}
         <div>
-          <label className={`text-xs font-bold uppercase tracking-widest block mb-1 ${!form.lorryReg ? 'text-amber-400' : 'text-slate-500'}`}>
+          <label className={`text-xs font-bold uppercase tracking-widest block mb-1 ${attempted && !form.lorryReg ? 'text-amber-400' : 'text-slate-500'}`}>
             Vehicle Reg
           </label>
           <div className="flex gap-2">
             <input type="text" value={form.lorryReg}
               onChange={e => handleRegChange(e.target.value.toUpperCase())}
               placeholder="SN68 VYL, van reg, trailer…"
-              className={`flex-1 bg-slate-800 border ${!form.lorryReg ? 'border-amber-500/40' : 'border-white/10'} text-white px-3 py-2.5 rounded text-sm font-mono focus:border-primary outline-none uppercase`} />
+              className={`flex-1 bg-slate-800 border ${attempted && !form.lorryReg ? 'border-amber-500/40' : 'border-white/10'} text-white px-3 py-2.5 rounded text-sm font-mono focus:border-primary outline-none uppercase`} />
             <select onChange={e => { if (e.target.value) handleRegChange(e.target.value) }}
               className="w-24 bg-slate-800 border border-white/10 text-white px-2 py-2 rounded text-xs font-bold uppercase">
               <option value="">Fleet</option>
@@ -329,13 +332,13 @@ export function WeighbridgeTab() {
 
         {/* Customer */}
         <div className="relative">
-          <label className={`text-xs font-bold uppercase tracking-widest block mb-1 ${!form.customerName ? 'text-amber-400' : 'text-slate-500'}`}>
+          <label className={`text-xs font-bold uppercase tracking-widest block mb-1 ${attempted && !form.customerName ? 'text-amber-400' : 'text-slate-500'}`}>
             Customer / Site
           </label>
           <input type="text" value={form.customerName}
             onChange={e => handleNameChange(e.target.value)}
             placeholder="Search customers…"
-            className={`w-full bg-slate-800 border ${!form.customerName ? 'border-amber-500/40' : 'border-white/10'} text-white px-3 py-2.5 rounded text-sm focus:border-primary outline-none`} />
+            className={`w-full bg-slate-800 border ${attempted && !form.customerName ? 'border-amber-500/40' : 'border-white/10'} text-white px-3 py-2.5 rounded text-sm focus:border-primary outline-none`} />
           {suggestions.length > 0 && (
             <div className="absolute z-50 w-full bg-slate-800 border border-white/20 rounded-lg mt-1 shadow-[0_20px_50px_rgba(0,0,0,0.6)] max-h-52 overflow-y-auto">
               {suggestions.map((c: any) => (
@@ -361,9 +364,9 @@ export function WeighbridgeTab() {
             </select>
           </div>
           <div>
-            <label className={`text-xs font-bold uppercase tracking-widest block mb-1 ${!selectedEwcId ? 'text-amber-400' : 'text-slate-500'}`}>EWC Code</label>
+            <label className={`text-xs font-bold uppercase tracking-widest block mb-1 ${attempted && !selectedEwcId ? 'text-amber-400' : 'text-slate-500'}`}>EWC Code</label>
             <select value={selectedEwcId} onChange={e => setSelectedEwcId(e.target.value)}
-              className={`w-full bg-slate-800 border ${selectedEwcId ? 'border-white/10' : 'border-amber-500/40'} text-white px-3 py-2.5 rounded text-sm`}>
+              className={`w-full bg-slate-800 border ${!attempted || selectedEwcId ? 'border-white/10' : 'border-amber-500/40'} text-white px-3 py-2.5 rounded text-sm`}>
               <option value="">Select…</option>
               {ewcCodes.map(e => <option key={e.id} value={e.id}>{e.code}</option>)}
             </select>
@@ -419,7 +422,7 @@ export function WeighbridgeTab() {
                   className="flex-1 min-w-0 bg-slate-900/60 border border-white/10 rounded-lg px-3 text-2xl font-black text-white outline-none placeholder:text-slate-700 focus:border-primary" />
                 <button onClick={() => captureScale('grossWeight')}
                   className="bg-primary text-slate-900 px-4 rounded-lg font-black text-sm uppercase tracking-wide whitespace-nowrap hover:scale-[1.02] transition-all">
-                  ⚡ Capture{liveWeight !== null ? ` ${liveWeight.toLocaleString()} kg` : ''}
+                  Capture{liveWeight !== null ? ` ${liveWeight.toLocaleString()} kg` : ''}
                 </button>
               </div>
             </div>
@@ -451,7 +454,7 @@ export function WeighbridgeTab() {
                       className="flex-1 min-w-0 bg-slate-900/60 border border-white/10 rounded-lg px-3 text-2xl font-black text-white outline-none placeholder:text-slate-700 focus:border-blue-400" />
                     <button onClick={() => captureScale('tareWeight')}
                       className="bg-blue-600 text-white px-4 rounded-lg font-black text-sm uppercase tracking-wide whitespace-nowrap hover:scale-[1.02] transition-all">
-                      ⚡ Capture{liveWeight !== null ? ` ${liveWeight.toLocaleString()} kg` : ''}
+                      Capture{liveWeight !== null ? ` ${liveWeight.toLocaleString()} kg` : ''}
                     </button>
                   </div>
                 )}
@@ -531,12 +534,12 @@ export function WeighbridgeTab() {
             // Gross captured, no tare yet — offer to park while tipping
             <button onClick={parkWhileTipping}
               className="w-full py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all shadow-xl bg-amber-500 text-slate-900 shadow-amber-500/20 hover:scale-[1.01]">
-              🚛 Truck Tipping — Park & Return for Outgoing Weight
+              Truck tipping — park & return for outgoing weight
             </button>
           ) : (
             <button onClick={handleWeighAndTicket} disabled={processing}
               className="w-full py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-all shadow-xl bg-primary text-slate-900 shadow-primary/20 hover:scale-[1.01] disabled:opacity-60 disabled:hover:scale-100">
-              {processing ? 'Processing…' : '⚖️ Weigh & Print Ticket'}
+              {processing ? 'Processing…' : 'Weigh & print ticket'}
             </button>
           )}
 

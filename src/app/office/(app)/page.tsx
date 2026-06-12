@@ -79,27 +79,21 @@ export default function OfficePage() {
         loadDash()
         const o = payload.new as { job_type?: string; customer_name?: string }
         toast.success(
-          `📋 New booking: ${o.job_type || 'Order'} — ${o.customer_name || 'Customer'}`,
-          { duration: 6000 }
+          `New booking: ${o.job_type || 'Order'} — ${o.customer_name || 'Customer'}`,
+          { duration: 5000 }
         )
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
         loadDash()
-        const o = payload.new as { status?: string; customer_name?: string; address?: string }
-        if (o.status === 'Completed') {
-          toast.success(`✅ Job completed: ${o.customer_name || 'Order'} · ${o.address || ''}`, {
-            duration: 5000,
-          })
-        } else if (o.status === 'Aborted') {
-          toast.error(`⛔ Job aborted: ${o.customer_name || 'Order'}`, { duration: 5000 })
+        // Completions refresh the dashboard silently — only failures interrupt.
+        const o = payload.new as { status?: string; customer_name?: string }
+        if (o.status === 'Aborted') {
+          toast.error(`Job aborted: ${o.customer_name || 'Order'}`, { duration: 5000 })
         }
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cash_log' }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cash_log' }, () => {
+        // Weighbridge tickets are created by this office — refresh silently.
         loadDash()
-        const cl = payload.new as { customer_name?: string; net_weight?: number }
-        toast(`⚖️ Weighbridge: ${cl.customer_name || 'Customer'} — ${cl.net_weight ?? '?'}kg`, {
-          duration: 4000,
-        })
       })
       .subscribe()
 
@@ -150,10 +144,10 @@ export default function OfficePage() {
       <header className="border-b border-white/5 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
         <div className="max-w-screen-2xl mx-auto px-6 h-14 flex items-center justify-between gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 bg-primary rounded flex items-center justify-center font-black italic text-xs">
+            <div className="w-7 h-7 bg-primary rounded flex items-center justify-center font-black text-xs">
               E
             </div>
-            <span className="font-black italic tracking-tighter uppercase text-sm">
+            <span className="font-black tracking-tighter uppercase text-sm">
               Enviroworx <span className="text-primary">Office</span>
             </span>
             {staffName && (

@@ -575,7 +575,7 @@ export function MapTab() {
             onClick={loadMapData}
             className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded text-xs font-black transition-all"
           >
-            ↻ Refresh
+            Refresh
           </button>
         </div>
       </div>
@@ -678,7 +678,7 @@ export function MapTab() {
                 className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500"
               />
               <p className="text-xs text-slate-500">
-                📍 {placeForm.lat.toFixed(5)}, {placeForm.lng.toFixed(5)}
+                {placeForm.lat.toFixed(5)}, {placeForm.lng.toFixed(5)}
               </p>
               <button
                 onClick={submitPlace}
@@ -708,7 +708,7 @@ export function MapTab() {
                 <span className="text-[11px] font-bold text-slate-500">{skip.skip_id}</span>
               </div>
               <p className="font-bold text-white text-xs truncate">{skip.customer_name || 'Unknown'}</p>
-              <p className="text-[11px] text-slate-400 truncate mt-0.5">🏗️ {skip.delivery_address || 'No address'}</p>
+              <p className="text-[11px] text-slate-400 truncate mt-0.5">{skip.delivery_address || 'No address'}</p>
             </button>
           ))}
           {liveOrders.map((o) => (
@@ -728,7 +728,7 @@ export function MapTab() {
                 <span className="text-[11px] font-bold text-slate-500">{o.status}</span>
               </div>
               <p className="font-bold text-white text-xs truncate">{o.customer_name}</p>
-              <p className="text-[11px] text-slate-400 truncate mt-0.5">📍 {o.address}</p>
+              <p className="text-[11px] text-slate-400 truncate mt-0.5">{o.address}</p>
             </button>
           ))}
         </div>
