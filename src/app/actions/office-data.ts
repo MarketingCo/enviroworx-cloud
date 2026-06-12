@@ -793,3 +793,29 @@ export async function deletePermitAction(id: string) {
   })
   return { success: true }
 }
+
+/** Today's scale activity vs tickets — catches trucks that crossed the
+ *  bridge but never got processed into a ticket. */
+export async function getScaleActivityAction() {
+  const session = await assertOffice()
+  const dayStart = new Date()
+  dayStart.setHours(0, 0, 0, 0)
+  const since = dayStart.toISOString()
+
+  const [{ data: peaks }, { count: tickets }] = await Promise.all([
+    supabaseAdmin
+      .from('weighbridge_readings')
+      .select('weight_kg, timestamp')
+      .eq('tenant_id', session.tenantId)
+      .eq('description', 'peak')
+      .gte('timestamp', since)
+      .order('timestamp', { ascending: false }),
+    supabaseAdmin
+      .from('weight_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', session.tenantId)
+      .gte('logged_at', since),
+  ])
+
+  return { peaks: peaks ?? [], tickets: tickets ?? 0 }
+}

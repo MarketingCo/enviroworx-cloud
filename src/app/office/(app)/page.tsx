@@ -174,7 +174,7 @@ export default function OfficePage() {
                     : 'text-slate-500 hover:text-white hover:bg-slate-800'
                 }`}
               >
-                {t.icon} {t.label}
+                {t.icon} <span className="hidden lg:inline">{t.label}</span>
               </button>
             ))}
 
@@ -189,7 +189,7 @@ export default function OfficePage() {
                 }`}
               >
                 {moreActive ? activeMoreTab?.icon : null}
-                {moreActive ? activeMoreTab?.label : 'More'}
+                <span className="hidden lg:inline">{moreActive ? activeMoreTab?.label : 'More'}</span>
                 <ChevronDown size={12} className={`transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
               </button>
               {moreOpen && (
@@ -227,9 +227,9 @@ export default function OfficePage() {
               onClick={handleLogout}
               className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-white px-2 py-1 rounded bg-slate-900 border border-white/5"
             >
-              <LogOut size={12} /> Sign out
+              <LogOut size={12} /> <span className="hidden sm:inline">Sign out</span>
             </button>
-            <div className="flex gap-2">
+            <div className="hidden md:flex gap-2">
               <a
                 href="/driver"
                 target="_blank"

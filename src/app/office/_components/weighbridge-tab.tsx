@@ -6,7 +6,7 @@ import { DEFAULT_CONFIG, WB_SIZES } from '@/lib/config'
 import toast from 'react-hot-toast'
 import { Weight, X } from 'lucide-react'
 import { getStoredTareAction as getStoredTare } from '@/app/actions/office-data'
-import { searchCustomersAction, getEwcCodesAction, generateWtnAction, getLatestScaleReadingAction } from '@/app/actions/office-data'
+import { searchCustomersAction, getEwcCodesAction, generateWtnAction, getLatestScaleReadingAction, getScaleActivityAction } from '@/app/actions/office-data'
 import { logActiveTipperAction, processWeightLogAction } from '@/app/actions/operations'
 import { SectionHeader } from './shared'
 
@@ -29,6 +29,8 @@ export function WeighbridgeTab() {
   const [processing, setProcessing] = useState(false)
   // SEPA returns need an EWC code on tip-ins; tenants can relax via config require_ewc=false
   const [requireEwc, setRequireEwc] = useState(true)
+  const [scaleActivity, setScaleActivity] = useState<{ peaks: { weight_kg: number | null; timestamp: string | null }[]; tickets: number } | null>(null)
+  const [activityOpen, setActivityOpen] = useState(false)
   const [form, setForm] = useState({ ...BLANK })
   const [suggestions, setSuggestions] = useState<any[]>([])
   const searchTimer = useRef<any>(null)
@@ -50,6 +52,7 @@ export function WeighbridgeTab() {
   }, [])
 
   async function load() {
+    getScaleActivityAction().then(setScaleActivity).catch(() => {})
     const [{ data: q }, { data: l }] = await Promise.all([
       supabase.from('active_tippers').select('*').order('timestamp', { ascending: false }),
       supabase.from('lorries').select('*').order('registration'),
@@ -249,6 +252,32 @@ export function WeighbridgeTab() {
             <span className="text-xs font-black uppercase tracking-widest text-slate-500">Scale Reading</span>
           </div>
           <span className="text-3xl font-black text-primary">{liveWeight.toLocaleString()} <span className="text-base">kg</span></span>
+        </div>
+      )}
+
+      {/* Scale activity today — crossings the scale saw vs tickets written */}
+      {scaleActivity && scaleActivity.peaks.length > 0 && (
+        <div className="bg-slate-900 border border-white/5 rounded-xl">
+          <button
+            onClick={() => setActivityOpen(o => !o)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left"
+          >
+            <span className="text-xs font-black uppercase tracking-widest text-slate-500">
+              Scale today · {scaleActivity.peaks.length} crossing{scaleActivity.peaks.length === 1 ? '' : 's'} · {scaleActivity.tickets} ticket{scaleActivity.tickets === 1 ? '' : 's'}
+            </span>
+            <span className={`text-xs font-black ${scaleActivity.tickets === 0 ? 'text-amber-400' : 'text-slate-500'}`}>
+              {scaleActivity.tickets === 0 ? '⚠ none ticketed' : activityOpen ? '▲' : '▼'}
+            </span>
+          </button>
+          {activityOpen && (
+            <div className="px-4 pb-3 flex flex-wrap gap-1.5">
+              {scaleActivity.peaks.map((pk, i) => (
+                <span key={i} className="text-xs font-bold bg-slate-800 text-slate-300 border border-white/5 rounded px-2 py-1">
+                  {pk.timestamp ? new Date(pk.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'} · {Number(pk.weight_kg ?? 0).toLocaleString()} kg
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
