@@ -302,7 +302,7 @@ export default function DriverApp() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white pb-28">
+    <div className="min-h-screen bg-slate-950 text-white pb-28">
       <Toaster position="top-center" />
 
       {/* Offline Banner */}
@@ -320,11 +320,10 @@ export default function DriverApp() {
       )}
 
       {/* App Bar */}
-      <div className="sticky top-0 bg-slate-900/95 backdrop-blur-sm z-40 px-4 py-3 border-b border-slate-700 flex justify-between items-center">
+      <div className="sticky top-0 bg-slate-950/95 backdrop-blur-sm z-40 px-4 py-3 border-b border-white/5 flex justify-between items-center">
         <div className="font-bold text-base flex items-center gap-2">
-          <span className="text-slate-400">👤</span>
           <span>{state.driver}</span>
-          <span className="text-slate-600 text-sm">· {state.lorry}</span>
+          <span className="text-slate-500 text-sm">· {state.lorry}</span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -335,7 +334,7 @@ export default function DriverApp() {
           <div onClick={() => loadJobs()} className="bg-emerald-500 text-black px-3 py-1.5 rounded-full font-extrabold text-xs cursor-pointer shadow">
             ↻ {jobs.length}
           </div>
-          <button onClick={handleClockOut} className="text-red-400 text-xl px-1">🚪</button>
+          <button onClick={handleClockOut} className="text-red-400 text-xs font-bold uppercase px-2 py-1.5 rounded-full bg-red-500/10">Out</button>
         </div>
       </div>
 
@@ -343,11 +342,10 @@ export default function DriverApp() {
       <div className="p-4 space-y-5">
         {jobs.length === 0 ? (
           <div className="text-center py-20">
-            <div className="text-5xl mb-4">✅</div>
-            <h3 className="text-xl font-bold">Route Complete</h3>
-            <p className="text-slate-400">No active jobs. Clock out when ready.</p>
-            <button onClick={handleClockOut} className="mt-8 bg-red-600 text-white px-8 py-4 rounded-xl font-black text-lg">
-              🚪 CLOCK OUT
+            <h3 className="text-xl font-black uppercase tracking-tight">Route complete</h3>
+            <p className="text-slate-400 mt-1">No active jobs. Clock out when ready.</p>
+            <button onClick={handleClockOut} className="mt-8 bg-red-600 hover:bg-red-500 text-white px-8 py-4 rounded-xl font-black text-lg uppercase tracking-wide transition-colors">
+              Clock out
             </button>
           </div>
         ) : (
@@ -451,29 +449,29 @@ function DriverJobCard({ job, index, total, config, onComplete, onAbort, onOnSit
   }
 
   return (
-    <div className={`bg-slate-800 rounded-2xl border-t-[6px] ${borderColor} shadow-xl overflow-hidden`}>
+    <div className={`bg-slate-900 border border-white/5 rounded-2xl border-t-[6px] ${borderColor} shadow-xl overflow-hidden`}>
       {/* Header */}
       <div className="px-5 pt-5 pb-3 flex justify-between items-start">
         <div>
           <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black mb-2 ${typeBadge}`}>
-            {job.job_type === 'Delivery' ? '📦' : job.job_type === 'Collection' ? '🔄' : '↔️'} {job.job_type}
+            {job.job_type}
             {job.skip_size && <span className="opacity-70">· {job.skip_size}yd</span>}
           </div>
           <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Stop {index} of {total}</div>
         </div>
         <button onClick={() => setShowAbort(!showAbort)}
           className={`px-3 py-1.5 rounded-lg text-sm font-bold transition ${showAbort ? 'bg-red-600 text-white' : 'bg-slate-700 text-red-400'}`}>
-          {showAbort ? '✕ Cancel' : '⛔ Abort'}
+          {showAbort ? 'Cancel' : 'Abort'}
         </button>
       </div>
 
       {/* Address + Customer */}
       <div className="px-5 pb-4 space-y-2">
-        <div className="text-white font-black text-lg leading-tight">📍 {job.address}</div>
-        <div className="text-slate-400 text-sm">👤 {job.customer_name}</div>
+        <div className="text-white font-black text-lg leading-tight">{job.address}</div>
+        <div className="text-slate-400 text-sm">{job.customer_name}</div>
         {job.delivery_comments && (
           <div className="bg-amber-500/10 border-l-4 border-amber-500 p-3 rounded-r-lg text-sm text-amber-200 mt-2">
-            📝 {job.delivery_comments}
+            {job.delivery_comments}
           </div>
         )}
       </div>
@@ -489,7 +487,7 @@ function DriverJobCard({ job, index, total, config, onComplete, onAbort, onOnSit
             }}
             className="w-full bg-amber-500/15 border border-amber-500/40 text-amber-300 py-3 rounded-xl font-black text-sm uppercase tracking-wide"
           >
-            📍 I&apos;m on site
+            I&apos;m on site
           </button>
         )}
         {onSite && (
@@ -501,21 +499,21 @@ function DriverJobCard({ job, index, total, config, onComplete, onAbort, onOnSit
           <button
             onClick={() => setShowMapMenu(!showMapMenu)}
             className="w-full bg-blue-500/15 border border-blue-500/30 text-blue-400 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2">
-            🗺️ Navigate — {job.address.split(',')[0]}
+            Navigate — {job.address.split(',')[0]}
             <span className="text-blue-500/50 ml-1">▼</span>
           </button>
           {showMapMenu && (
-            <div className="absolute left-0 right-0 top-full mt-1 bg-slate-700 rounded-xl shadow-2xl z-30 overflow-hidden border border-slate-600">
+            <div className="absolute left-0 right-0 top-full mt-1 bg-slate-800 rounded-xl shadow-2xl z-30 overflow-hidden border border-white/10">
               <a href={wazeUrl} target="_blank" onClick={() => setShowMapMenu(false)}
-                className="flex items-center gap-3 px-5 py-4 border-b border-slate-600 hover:bg-slate-600 active:bg-slate-500 font-bold text-sm">
+                className="flex items-center gap-3 px-5 py-4 border-b border-white/10 hover:bg-slate-700 active:bg-slate-600 font-bold text-sm">
                 <span className="text-xl">🗺️</span> Waze
               </a>
               <a href={googleMapsUrl} target="_blank" onClick={() => setShowMapMenu(false)}
-                className="flex items-center gap-3 px-5 py-4 border-b border-slate-600 hover:bg-slate-600 active:bg-slate-500 font-bold text-sm">
+                className="flex items-center gap-3 px-5 py-4 border-b border-white/10 hover:bg-slate-700 active:bg-slate-600 font-bold text-sm">
                 <span className="text-xl">🌐</span> Google Maps
               </a>
               <a href={appleMapsUrl} target="_blank" onClick={() => setShowMapMenu(false)}
-                className="flex items-center gap-3 px-5 py-4 hover:bg-slate-600 active:bg-slate-500 font-bold text-sm">
+                className="flex items-center gap-3 px-5 py-4 hover:bg-slate-700 active:bg-slate-600 font-bold text-sm">
                 <span className="text-xl">🍎</span> Apple Maps
               </a>
             </div>
@@ -526,13 +524,13 @@ function DriverJobCard({ job, index, total, config, onComplete, onAbort, onOnSit
       {/* Call Buttons */}
       <div className="px-5 pb-4 flex gap-2">
         <a href={`tel:${config.officePhone}`}
-          className="flex-1 bg-slate-700 px-3 py-2.5 rounded-xl text-center text-sm font-bold hover:bg-slate-600 active:bg-slate-500">
-          🏢 Office
+          className="flex-1 bg-slate-800 border border-white/10 px-3 py-2.5 rounded-xl text-center text-sm font-bold hover:bg-slate-700 active:bg-slate-600">
+          Call office
         </a>
         {job.phone && (
           <a href={`tel:${job.phone}`}
             className="flex-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-2.5 rounded-xl text-center text-sm font-bold hover:bg-emerald-500/20">
-            📞 Customer
+            Call customer
           </a>
         )}
       </div>
@@ -543,7 +541,7 @@ function DriverJobCard({ job, index, total, config, onComplete, onAbort, onOnSit
           <h4 className="text-red-400 font-black mb-3 text-sm uppercase tracking-wide">Failed Delivery / Abort</h4>
           <input type="text" value={abortReason} onChange={e => setAbortReason(e.target.value)}
             placeholder="Reason (e.g. Gate locked, No access)"
-            className="w-full p-3 rounded-lg bg-slate-700 border border-slate-600 mb-3 text-sm" />
+            className="w-full p-3 rounded-lg bg-slate-800 border border-white/10 mb-3 text-sm" />
           <button onClick={() => onAbort(job.id, abortReason)}
             className="w-full bg-red-600 py-3 rounded-lg font-black text-sm">
             Confirm Abort
@@ -552,15 +550,15 @@ function DriverJobCard({ job, index, total, config, onComplete, onAbort, onOnSit
       )}
 
       {/* Divider */}
-      <div className="border-t border-slate-700 mx-5" />
+      <div className="border-t border-white/5 mx-5" />
 
       {/* Complete Job Section */}
       <div className="p-5 space-y-3">
         {/* Photo */}
         <label className={`flex items-center justify-center gap-3 p-4 rounded-xl cursor-pointer font-bold text-sm transition border-2 ${
-          photoTaken ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400' : photoUploading ? 'border-slate-600 bg-slate-700 text-slate-400 animate-pulse' : 'border-dashed border-slate-600 bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+          photoTaken ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400' : photoUploading ? 'border-white/10 bg-slate-800 text-slate-400 animate-pulse' : 'border-dashed border-white/20 bg-slate-800/60 text-slate-300 hover:bg-slate-800'
         }`}>
-          {photoUploading ? '⏳ Uploading...' : photoTaken ? '✅ Photo Attached — Tap to replace' : '📸 Take Proof Photo (required)'}
+          {photoUploading ? 'Uploading…' : photoTaken ? '✓ Photo attached — tap to replace' : '📸 Take proof photo (required)'}
           <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhoto} disabled={photoUploading} />
         </label>
 
@@ -568,8 +566,8 @@ function DriverJobCard({ job, index, total, config, onComplete, onAbort, onOnSit
         <div className="flex gap-2">
           {!isRecording ? (
             <button onClick={startVoiceNote}
-              className={`flex-1 py-3 rounded-xl font-bold text-sm transition ${voiceUploaded ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}>
-              {voiceUploaded ? '🎙️ Voice Note Saved' : '🎙️ Record Voice Note'}
+              className={`flex-1 py-3 rounded-xl font-bold text-sm transition ${voiceUploaded ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-slate-800 border border-white/10 text-slate-400 hover:bg-slate-700'}`}>
+              {voiceUploaded ? '🎙️ Voice note saved' : '🎙️ Record voice note'}
             </button>
           ) : (
             <button onClick={stopVoiceNote}
@@ -585,7 +583,7 @@ function DriverJobCard({ job, index, total, config, onComplete, onAbort, onOnSit
           value={skipId}
           onChange={e => setSkipId(e.target.value)}
           placeholder={job.hint ? `Skip ID (hint: ${job.hint})` : 'Enter Skip ID'}
-          className="w-full p-4 rounded-xl bg-slate-900 border-2 border-slate-600 text-lg font-bold focus:border-emerald-500 focus:outline-none transition"
+          className="w-full p-4 rounded-xl bg-slate-950 border-2 border-white/10 text-lg font-bold focus:border-emerald-500 focus:outline-none transition"
           autoCapitalize="characters"
         />
 
@@ -595,10 +593,10 @@ function DriverJobCard({ job, index, total, config, onComplete, onAbort, onOnSit
           disabled={!photoTaken || !skipId.trim() || completing}
           className={`w-full py-4 rounded-xl font-black text-lg transition shadow-lg ${
             photoTaken && skipId.trim() && !completing
-              ? 'bg-gradient-to-r from-emerald-500 to-emerald-700 text-white active:from-emerald-600'
-              : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+              ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 active:scale-[0.99]'
+              : 'bg-slate-800 text-slate-500 cursor-not-allowed'
           }`}>
-          {completing ? '⏳ Syncing...' : photoTaken && skipId.trim() ? '✅ COMPLETE JOB' : !photoTaken ? '🔒 Photo Required' : '🔒 Enter Skip ID'}
+          {completing ? 'Syncing…' : photoTaken && skipId.trim() ? 'Complete job' : !photoTaken ? 'Photo required' : 'Enter skip ID'}
         </button>
       </div>
     </div>

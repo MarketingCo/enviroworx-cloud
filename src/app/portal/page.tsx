@@ -269,22 +269,24 @@ export default function CustomerPortal() {
   // ── LOGIN SCREEN ──
   if (screen === 'login') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-900 via-slate-900 to-slate-800 flex items-center justify-center p-5">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-5">
         <Toaster position="top-center" />
         <div className="w-full max-w-sm">
           <div className="text-center mb-10">
-            <h1 className="text-4xl font-black text-emerald-400 mb-2">ENVIROWORX</h1>
-            <p className="text-slate-400 text-lg">Customer Portal</p>
+            <h1 className="text-4xl font-black tracking-tighter uppercase mb-1 text-white">
+              Enviroworx <span className="text-emerald-400">Portal</span>
+            </h1>
+            <p className="text-slate-500">Your hires, invoices and requests</p>
           </div>
 
-          <div className="bg-slate-800/70 backdrop-blur-sm rounded-2xl p-6 shadow-2xl border border-slate-700">
+          <div className="bg-slate-900 rounded-2xl p-6 shadow-2xl border border-white/10">
             <label className="block text-slate-400 text-sm font-bold mb-2">Your Name</label>
             <input
               type="text"
               value={loginName}
               onChange={e => setLoginName(e.target.value)}
               placeholder="e.g. Smith Construction"
-              className="w-full p-4 rounded-xl bg-slate-900 border border-slate-600 text-white text-lg mb-5 focus:border-emerald-500 focus:outline-none"
+              className="w-full p-4 rounded-xl bg-slate-900 border border-white/10 text-white text-lg mb-5 focus:border-emerald-500 focus:outline-none"
             />
 
             <label className="block text-slate-400 text-sm font-bold mb-2">Portal PIN</label>
@@ -294,16 +296,16 @@ export default function CustomerPortal() {
               onChange={e => setLoginPin(e.target.value)}
               placeholder="4-digit PIN"
               maxLength={4}
-              className="w-full p-4 rounded-xl bg-slate-900 border border-slate-600 text-white text-lg mb-6 focus:border-emerald-500 focus:outline-none"
+              className="w-full p-4 rounded-xl bg-slate-900 border border-white/10 text-white text-lg mb-6 focus:border-emerald-500 focus:outline-none"
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
             />
 
             <button
               onClick={handleLogin}
               disabled={loading}
-              className="w-full bg-gradient-to-r from-emerald-500 to-emerald-700 p-4 rounded-xl text-white font-bold text-lg shadow-lg hover:from-emerald-600 hover:to-emerald-800 transition disabled:opacity-50"
+              className="w-full bg-emerald-500 hover:bg-emerald-400 p-4 rounded-xl text-slate-950 font-black text-lg uppercase tracking-wide transition disabled:opacity-50"
             >
-              {loading ? 'Logging in...' : 'Sign In'}
+              {loading ? 'Logging in…' : 'Sign in'}
             </button>
 
             <p className="text-slate-500 text-sm text-center mt-5">
@@ -321,29 +323,29 @@ export default function CustomerPortal() {
   const completedOrders = orders.filter(o => o.status === 'Completed').length
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <div className="min-h-screen bg-slate-950 text-white">
       <Toaster position="top-center" />
 
       {/* Header */}
-      <div className="bg-slate-800 border-b border-slate-700 px-5 py-4 flex justify-between items-center">
+      <div className="bg-slate-800 border-b border-white/10 px-5 py-4 flex justify-between items-center">
         <div>
           <h1 className="text-xl font-bold text-emerald-400">ENVIROWORX</h1>
           <p className="text-slate-400 text-sm">Welcome, {customer?.name}</p>
         </div>
-        <button onClick={handleLogout} className="text-slate-400 hover:text-white text-sm font-bold px-4 py-2 bg-slate-700 rounded-lg">
+        <button onClick={handleLogout} className="text-slate-400 hover:text-white text-sm font-bold px-4 py-2 bg-slate-800 rounded-lg">
           Sign Out
         </button>
       </div>
 
       {/* Tab Bar */}
-      <div className="flex border-b border-slate-700 bg-slate-800/50 overflow-x-auto">
+      <div className="flex border-b border-white/10 bg-slate-800/50 overflow-x-auto">
         {(['overview', 'orders', 'tips', 'request', 'details'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`px-5 py-3 text-sm font-bold whitespace-nowrap transition ${tab === t ? 'text-emerald-400 border-b-2 border-emerald-400' : 'text-slate-400 hover:text-white'}`}
           >
-            {t === 'overview' ? '📊 Overview' : t === 'orders' ? '📋 Skip Hire' : t === 'tips' ? '⚖️ Weighbridge' : t === 'request' ? '🚛 Book a Skip' : '👤 My Details'}
+            {t === 'overview' ? 'Overview' : t === 'orders' ? 'Skip Hire' : t === 'tips' ? 'Weighbridge' : t === 'request' ? 'Book a Skip' : 'My Details'}
           </button>
         ))}
       </div>
@@ -355,7 +357,7 @@ export default function CustomerPortal() {
           <div className="space-y-6">
             {/* Active hires — request collection */}
             {activeHires.length > 0 && (
-              <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
+              <div className="bg-slate-900 rounded-2xl border border-white/10 p-5">
                 <h3 className="text-lg font-bold mb-1">Skips on your site ({activeHires.length})</h3>
                 <p className="text-slate-400 text-sm mb-4">Finished with one? Request a collection and we&apos;ll book it in.</p>
                 <div className="space-y-3">
@@ -364,7 +366,7 @@ export default function CustomerPortal() {
                       ? Math.floor((Date.now() - new Date(h.delivery_date).getTime()) / 86400000)
                       : null
                     return (
-                      <div key={h.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-900/60 border border-slate-700 rounded-lg p-4">
+                      <div key={h.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-900/60 border border-white/10 rounded-lg p-4">
                         <div>
                           <p className="font-bold">
                             {h.skip_size}yd skip <span className="text-slate-500 font-normal">· {h.skip_id}</span>
@@ -389,7 +391,7 @@ export default function CustomerPortal() {
                           disabled={collecting === h.id}
                           className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-sm px-4 py-2.5 rounded-lg whitespace-nowrap"
                         >
-                          {collecting === h.id ? 'Requesting…' : '🚛 Request collection'}
+                          {collecting === h.id ? 'Requesting…' : 'Request collection'}
                         </button>
                       </div>
                     )
@@ -422,10 +424,10 @@ export default function CustomerPortal() {
             </div>
 
             {/* Recent Activity */}
-            <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+            <div className="bg-slate-800 rounded-xl p-5 border border-white/10">
               <h3 className="text-lg font-bold mb-4">Recent Activity</h3>
               {orders.slice(0, 5).map(o => (
-                <div key={o.id} className="flex justify-between items-center py-3 border-b border-slate-700 last:border-0">
+                <div key={o.id} className="flex justify-between items-center py-3 border-b border-white/10 last:border-0">
                   <div>
                     <span className={`text-sm font-bold ${o.job_type === 'Delivery' ? 'text-emerald-400' : o.job_type === 'Collection' ? 'text-red-400' : 'text-amber-400'}`}>
                       {o.job_type}
@@ -451,13 +453,13 @@ export default function CustomerPortal() {
 
         {/* ORDERS TAB */}
         {tab === 'orders' && (
-          <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-            <div className="p-4 border-b border-slate-700">
+          <div className="bg-slate-900 rounded-2xl border border-white/10 overflow-hidden">
+            <div className="p-4 border-b border-white/10">
               <h3 className="text-lg font-bold">Skip Hire History</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-700/50">
+                <thead className="bg-slate-800/60">
                   <tr>
                     <th className="text-left p-3 text-slate-400">Date</th>
                     <th className="text-left p-3 text-slate-400">Type</th>
@@ -469,7 +471,7 @@ export default function CustomerPortal() {
                 </thead>
                 <tbody>
                   {orders.map(o => (
-                    <tr key={o.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                    <tr key={o.id} className="border-b border-white/5 hover:bg-white/[0.03]">
                       <td className="p-3">{o.date}</td>
                       <td className="p-3">{o.job_type}</td>
                       <td className="p-3">{o.skip_size}yd</td>
@@ -505,13 +507,13 @@ export default function CustomerPortal() {
 
         {/* WEIGHBRIDGE TIPS TAB */}
         {tab === 'tips' && (
-          <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-            <div className="p-4 border-b border-slate-700">
+          <div className="bg-slate-900 rounded-2xl border border-white/10 overflow-hidden">
+            <div className="p-4 border-b border-white/10">
               <h3 className="text-lg font-bold">Weighbridge History</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-700/50">
+                <thead className="bg-slate-800/60">
                   <tr>
                     <th className="text-left p-3 text-slate-400">Date</th>
                     <th className="text-left p-3 text-slate-400">Ticket</th>
@@ -524,7 +526,7 @@ export default function CustomerPortal() {
                 </thead>
                 <tbody>
                   {cashLogs.map(cl => (
-                    <tr key={cl.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                    <tr key={cl.id} className="border-b border-white/5 hover:bg-white/[0.03]">
                       <td className="p-3">{new Date(cl.logged_at).toLocaleDateString('en-GB')}</td>
                       <td className="p-3 font-mono text-emerald-400">{cl.ticket_number}</td>
                       <td className="p-3">{cl.waste_type}</td>
@@ -553,13 +555,13 @@ export default function CustomerPortal() {
                 </p>
                 <button
                   onClick={() => setBookSubmitted(false)}
-                  className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-white font-bold transition"
+                  className="px-6 py-3 bg-slate-800 hover:bg-slate-600 rounded-lg text-white font-bold transition"
                 >
                   Book Another
                 </button>
               </div>
             ) : (
-              <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 space-y-5">
+              <div className="bg-slate-800 rounded-xl p-6 border border-white/10 space-y-5">
                 <div>
                   <h3 className="text-lg font-bold mb-1">Book a Skip / Collection</h3>
                   <p className="text-slate-400 text-sm">Request a skip hire or collection. You&apos;ll get SMS confirmation once a driver is assigned.</p>
@@ -573,7 +575,7 @@ export default function CustomerPortal() {
                       <button
                         key={jt}
                         onClick={() => setBookJobType(jt)}
-                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${bookJobType === jt ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-600'}`}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${bookJobType === jt ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white border border-white/10'}`}
                       >
                         {jt}
                       </button>
@@ -590,7 +592,7 @@ export default function CustomerPortal() {
                         <button
                           key={size}
                           onClick={() => setBookSkipSize(size)}
-                          className={`py-3 rounded-lg text-center transition ${bookSkipSize === size ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-600'}`}
+                          className={`py-3 rounded-lg text-center transition ${bookSkipSize === size ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white border border-white/10'}`}
                         >
                           <div className="font-black text-lg">{size}yd</div>
                           <div className="text-xs opacity-70">£{price}</div>
@@ -618,7 +620,7 @@ export default function CustomerPortal() {
                     value={collAddress}
                     onChange={e => setCollAddress(e.target.value)}
                     placeholder={customer?.shipping_address || 'e.g. 14 High Street, Edinburgh'}
-                    className="w-full p-3 rounded-lg bg-slate-900 border border-slate-600 text-white focus:border-emerald-500 focus:outline-none"
+                    className="w-full p-3 rounded-lg bg-slate-900 border border-white/10 text-white focus:border-emerald-500 focus:outline-none"
                   />
                   {customer?.shipping_address && !collAddress && (
                     <button
@@ -638,7 +640,7 @@ export default function CustomerPortal() {
                     value={collDate}
                     onChange={e => setCollDate(e.target.value)}
                     min={new Date().toISOString().split('T')[0]}
-                    className="w-full p-3 rounded-lg bg-slate-900 border border-slate-600 text-white focus:border-emerald-500 focus:outline-none"
+                    className="w-full p-3 rounded-lg bg-slate-900 border border-white/10 text-white focus:border-emerald-500 focus:outline-none"
                   />
                 </div>
 
@@ -650,7 +652,7 @@ export default function CustomerPortal() {
                     onChange={e => setCollNotes(e.target.value)}
                     placeholder="Access instructions, gate codes, any special requirements..."
                     rows={3}
-                    className="w-full p-3 rounded-lg bg-slate-900 border border-slate-600 text-white focus:border-emerald-500 focus:outline-none resize-none"
+                    className="w-full p-3 rounded-lg bg-slate-900 border border-white/10 text-white focus:border-emerald-500 focus:outline-none resize-none"
                   />
                 </div>
 
@@ -669,7 +671,7 @@ export default function CustomerPortal() {
         {/* MY DETAILS TAB */}
         {tab === 'details' && (
           <div className="max-w-lg mx-auto">
-            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+            <div className="bg-slate-800 rounded-xl p-6 border border-white/10">
               <h3 className="text-lg font-bold mb-5">My Contact Details</h3>
 
               <label className="block text-slate-400 text-sm font-bold mb-2">Phone</label>
@@ -677,7 +679,7 @@ export default function CustomerPortal() {
                 type="tel"
                 value={editPhone}
                 onChange={e => setEditPhone(e.target.value)}
-                className="w-full p-3 rounded-lg bg-slate-900 border border-slate-600 text-white mb-4 focus:border-emerald-500 focus:outline-none"
+                className="w-full p-3 rounded-lg bg-slate-900 border border-white/10 text-white mb-4 focus:border-emerald-500 focus:outline-none"
               />
 
               <label className="block text-slate-400 text-sm font-bold mb-2">Email</label>
@@ -685,7 +687,7 @@ export default function CustomerPortal() {
                 type="email"
                 value={editEmail}
                 onChange={e => setEditEmail(e.target.value)}
-                className="w-full p-3 rounded-lg bg-slate-900 border border-slate-600 text-white mb-4 focus:border-emerald-500 focus:outline-none"
+                className="w-full p-3 rounded-lg bg-slate-900 border border-white/10 text-white mb-4 focus:border-emerald-500 focus:outline-none"
               />
 
               <label className="block text-slate-400 text-sm font-bold mb-2">Default Address</label>
@@ -693,7 +695,7 @@ export default function CustomerPortal() {
                 type="text"
                 value={editAddress}
                 onChange={e => setEditAddress(e.target.value)}
-                className="w-full p-3 rounded-lg bg-slate-900 border border-slate-600 text-white mb-6 focus:border-emerald-500 focus:outline-none"
+                className="w-full p-3 rounded-lg bg-slate-900 border border-white/10 text-white mb-6 focus:border-emerald-500 focus:outline-none"
               />
 
               <button
@@ -705,7 +707,7 @@ export default function CustomerPortal() {
               </button>
             </div>
 
-            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mt-5">
+            <div className="bg-slate-800 rounded-xl p-6 border border-white/10 mt-5">
               <h3 className="text-lg font-bold mb-3">Account Summary</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-slate-400">Account Name</span> <span className="font-bold">{customer?.name}</span></div>
@@ -723,7 +725,7 @@ export default function CustomerPortal() {
 
 function StatCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+    <div className="bg-slate-800 rounded-xl p-4 border border-white/10">
       <p className="text-slate-400 text-xs font-bold mb-1">{label}</p>
       <p className={`text-2xl font-black ${color}`}>{value}</p>
     </div>
