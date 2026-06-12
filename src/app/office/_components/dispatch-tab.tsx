@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase-browser'
 import { DEFAULT_CONFIG } from '@/lib/config'
 import toast from 'react-hot-toast'
-import { Truck, RefreshCw, Zap, X, CheckCircle, DollarSign } from 'lucide-react'
+import { Truck, RefreshCw, Zap, X, CheckCircle, PoundSterling } from 'lucide-react'
 import { getDispatchJobsAction as getDispatchJobs } from '@/app/actions/office-data'
 import { assignDriverToJobAction, autoAssignJobsAction, cancelBookingAction } from '@/app/actions/operations'
 import { optimiseDriverRouteAction, saveRouteOrderAction, type OptimisedRoute } from '@/app/actions/routing'
@@ -290,7 +290,7 @@ export function DispatchTab() {
                           isSynced ? 'bg-green-900/20 text-green-500 cursor-default' : 'bg-primary/10 text-primary hover:bg-primary hover:text-white'
                         }`}
                       >
-                        {isSynced ? <CheckCircle size={12} /> : <DollarSign size={12} />}
+                        {isSynced ? <CheckCircle size={12} /> : <PoundSterling size={12} />}
                         {isSynced ? 'Synced to QB' : 'Sync to QB'}
                       </button>
                     )}

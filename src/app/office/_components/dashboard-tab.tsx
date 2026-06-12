@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { DEFAULT_CONFIG } from '@/lib/config'
 import toast from 'react-hot-toast'
-import { CheckCircle, Clock, AlertTriangle, TrendingUp, CalendarPlus, Weight, DollarSign } from 'lucide-react'
+import { CheckCircle, Clock, AlertTriangle, TrendingUp, CalendarPlus, Weight, PoundSterling } from 'lucide-react'
 import { sendOverstaySmsAction } from '@/app/actions/operations'
 
 import { fmt, today, tomorrow, KpiCard, SectionHeader, Badge, statusColor, type DashStats } from './shared'
@@ -63,7 +63,7 @@ export function DashboardTab({ data, onRefresh }: { data: DashStats | null; onRe
         <KpiCard label="Completed This Week" value={data.stats.completedWeek} icon={<TrendingUp size={24} />} />
         <KpiCard label="Future Bookings" value={data.stats.futureBookings} icon={<CalendarPlus size={24} />} color="text-blue-400" />
         <KpiCard label="Tips Today" value={data.stats.tipsToday} icon={<Weight size={24} />} color="text-yellow-400" />
-        <KpiCard label="Est. Profit Today" value={fmt(data.stats.estProfitToday || 0)} icon={<DollarSign size={24} />} color="text-emerald-500" />
+        <KpiCard label="Est. Profit Today" value={fmt(data.stats.estProfitToday || 0)} icon={<PoundSterling size={24} />} color="text-emerald-500" />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">

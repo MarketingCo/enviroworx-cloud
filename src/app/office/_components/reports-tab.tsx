@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { DEFAULT_CONFIG, SKIP_SIZES, WB_SIZES } from '@/lib/config'
 import toast from 'react-hot-toast'
-import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, FileSpreadsheet, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, DollarSign, Settings, Trash2 } from 'lucide-react'
+import { LayoutDashboard, Truck, Weight, CalendarPlus, Users, FileText, FileSpreadsheet, Wrench, RefreshCw, CheckCircle, Clock, AlertTriangle, Package, TrendingUp, ChevronRight, Zap, X, Search, Settings, Trash2 } from 'lucide-react'
 import {
   generateReportAction,
   getOpsSummaryAction,
