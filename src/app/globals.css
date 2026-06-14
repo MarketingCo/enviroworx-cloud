@@ -26,3 +26,59 @@
 .job-border-exchange { border-left: 5px solid #f59e0b; }
 .job-border-wait { border-left: 5px solid #3b82f6; }
 .job-border-cage { border-left: 5px solid #8b5cf6; }
+
+/* ── Office light theme ─────────────────────────────────────────────
+   The office app is authored dark-first with slate utilities; this
+   block remaps them inside [data-theme='light'] (set on the office
+   root by the header toggle). Attribute+class beats a lone utility on
+   specificity, so no !important needed. */
+[data-theme='light'] { color-scheme: light; }
+[data-theme='light'] .bg-slate-950 { background-color: #eef2f7; }
+[data-theme='light'] .bg-slate-950\/80 { background-color: rgba(238, 242, 247, 0.85); }
+[data-theme='light'] .bg-slate-950\/95 { background-color: rgba(238, 242, 247, 0.95); }
+[data-theme='light'] .bg-slate-900 { background-color: #ffffff; }
+[data-theme='light'] .bg-slate-900\/95 { background-color: rgba(255, 255, 255, 0.95); }
+[data-theme='light'] .bg-slate-900\/80 { background-color: rgba(255, 255, 255, 0.85); }
+[data-theme='light'] .bg-slate-900\/60 { background-color: rgba(255, 255, 255, 0.7); }
+[data-theme='light'] .bg-slate-900\/50 { background-color: rgba(255, 255, 255, 0.6); }
+[data-theme='light'] .bg-slate-800 { background-color: #f1f5f9; }
+[data-theme='light'] .bg-slate-800\/60 { background-color: #f5f8fb; }
+[data-theme='light'] .bg-slate-800\/40 { background-color: #f6f9fc; }
+[data-theme='light'] .bg-slate-800\/20 { background-color: #f8fafc; }
+[data-theme='light'] .bg-slate-700 { background-color: #e2e8f0; }
+[data-theme='light'] .hover\:bg-slate-800:hover { background-color: #e2e8f0; }
+[data-theme='light'] .hover\:bg-slate-700:hover { background-color: #cbd5e1; }
+[data-theme='light'] .hover\:bg-white\/5:hover { background-color: rgba(15, 23, 42, 0.05); }
+[data-theme='light'] .hover\:bg-white\/\[0\.02\]:hover { background-color: rgba(15, 23, 42, 0.03); }
+[data-theme='light'] .text-white { color: #0f172a; }
+[data-theme='light'] .hover\:text-white:hover { color: #0f172a; }
+[data-theme='light'] .text-slate-200 { color: #1e293b; }
+[data-theme='light'] .text-slate-300 { color: #334155; }
+[data-theme='light'] .text-slate-400 { color: #475569; }
+[data-theme='light'] .text-slate-500 { color: #64748b; }
+[data-theme='light'] .text-slate-600 { color: #94a3b8; }
+[data-theme='light'] .border-white\/5 { border-color: rgba(15, 23, 42, 0.08); }
+[data-theme='light'] .border-white\/10 { border-color: rgba(15, 23, 42, 0.15); }
+[data-theme='light'] .border-white\/20 { border-color: rgba(15, 23, 42, 0.25); }
+[data-theme='light'] .hover\:border-white\/30:hover { border-color: rgba(15, 23, 42, 0.3); }
+[data-theme='light'] .divide-white\/5 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(15, 23, 42, 0.08); }
+[data-theme='light'] .placeholder\:text-slate-500::placeholder { color: #94a3b8; }
+[data-theme='light'] .placeholder\:text-slate-600::placeholder { color: #94a3b8; }
+[data-theme='light'] .placeholder\:text-slate-700::placeholder { color: #94a3b8; }
+/* Status chips: dark-tinted backgrounds and 400-series text flip to
+   light tints with 700-series text for contrast on white. */
+[data-theme='light'] .bg-green-900\/40 { background-color: #dcfce7; }
+[data-theme='light'] .bg-blue-900\/40 { background-color: #dbeafe; }
+[data-theme='light'] .bg-yellow-900\/40 { background-color: #fef9c3; }
+[data-theme='light'] .bg-red-900\/40 { background-color: #fee2e2; }
+[data-theme='light'] .bg-orange-900\/40 { background-color: #ffedd5; }
+[data-theme='light'] .bg-amber-900\/40 { background-color: #fef3c7; }
+[data-theme='light'] .bg-emerald-500\/10 { background-color: #d1fae5; }
+[data-theme='light'] .text-green-400 { color: #15803d; }
+[data-theme='light'] .text-emerald-400 { color: #047857; }
+[data-theme='light'] .text-emerald-500 { color: #047857; }
+[data-theme='light'] .text-blue-400 { color: #1d4ed8; }
+[data-theme='light'] .text-yellow-400 { color: #a16207; }
+[data-theme='light'] .text-amber-400 { color: #b45309; }
+[data-theme='light'] .text-red-400 { color: #b91c1c; }
+[data-theme='light'] .text-orange-400 { color: #c2410c; }

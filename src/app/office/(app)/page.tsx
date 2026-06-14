@@ -21,6 +21,8 @@ import {
   ScrollText,
   Signpost,
   ChevronDown,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import type { Tab, DashStats } from '../_components/shared'
 import { DashboardTab } from '../_components/dashboard-tab'
@@ -40,6 +42,23 @@ export default function OfficePage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('dashboard')
   const [moreOpen, setMoreOpen] = useState(false)
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('ewx-theme') === 'light') setTheme('light')
+    } catch {}
+  }, [])
+
+  function toggleTheme() {
+    setTheme((t) => {
+      const next = t === 'dark' ? 'light' : 'dark'
+      try {
+        localStorage.setItem('ewx-theme', next)
+      } catch {}
+      return next
+    })
+  }
   const [dashData, setDashData] = useState<DashStats | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [staffName, setStaffName] = useState<string | null>(null)
@@ -133,11 +152,14 @@ export default function OfficePage() {
   const isConfigMissing = !process.env.NEXT_PUBLIC_SUPABASE_URL
 
   return (
-    <div className="bg-slate-950 min-h-screen text-white">
+    <div className="bg-slate-950 min-h-screen text-white" data-theme={theme}>
       <Toaster
         position="top-right"
         toastOptions={{
-          style: { background: '#1e293b', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' },
+          style:
+            theme === 'light'
+              ? { background: '#ffffff', color: '#0f172a', border: '1px solid rgba(15,23,42,0.12)' }
+              : { background: '#1e293b', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' },
         }}
       />
 
@@ -217,6 +239,13 @@ export default function OfficePage() {
                 <RefreshCw size={14} />
               </button>
             )}
+            <button
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="text-slate-500 hover:text-white p-1.5 rounded bg-slate-900 border border-white/5"
+            >
+              {theme === 'dark' ? <Sun size={13} /> : <Moon size={13} />}
+            </button>
             <button
               onClick={handleLogout}
               className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-white px-2 py-1 rounded bg-slate-900 border border-white/5"
